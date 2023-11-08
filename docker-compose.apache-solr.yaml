@@ -1,0 +1,18 @@
+#ddev-generated
+services:
+  apache-solr:
+    container_name: ddev-${DDEV_SITENAME}-apache-solr
+    hostname: ${DDEV_SITENAME}-apache-solr
+    image: solr:9.4
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: $DDEV_APPROOT
+    environment:
+      - VIRTUAL_HOST=$DDEV_HOSTNAME
+      - HTTPS_EXPOSE=8983
+      - HTTP_EXPOSE=8983
+    volumes:
+      - ./apache-solr/data:/var/solr/data
+  web:
+    links:
+      - apache-solr
