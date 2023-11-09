@@ -101,6 +101,17 @@ case $CMD in
     ;;
 
   --help|*)
-    # @todo: show some useful information
+    echo "——————————————"
+    echo -e "\033[1mExample Usage:\033[0m"
+    echo "——————————————"
+    echo -e "\033[1mApply\033[0m"
+    echo "—————"
+    echo "Create solr cores and configsets defined in .ddev/apache-solr/config.yaml"
+    echo "👉 ddev solrctl apply [path] - relative to docroot, optional"
+    echo ""
+    echo -e "\033[1mWipe\033[0m"
+    echo "—————"
+    echo "Remove solr cores and configset"
+    echo "👉 ddev solrctl wipe"
     ;;
 esac

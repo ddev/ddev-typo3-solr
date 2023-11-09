@@ -47,3 +47,9 @@
   [ ! -d "$TESTDIR/.ddev/apache-solr/data/configsets/core_de" ]
   [ ! -d "$TESTDIR/.ddev/apache-solr/data/configsets/core_en" ]
 }
+
+@test "Test solr command" {
+  ddev solr status
+
+  [ "$?" -eq 0 ]
+}

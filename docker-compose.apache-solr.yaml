@@ -12,7 +12,8 @@ services:
       - HTTPS_EXPOSE=8983
       - HTTP_EXPOSE=8983
     volumes:
-      - ./apache-solr/data:/var/solr/data
+      - "./apache-solr/data:/var/solr/data"
+      - ".:/mnt/ddev_config"
   web:
     links:
       - apache-solr
