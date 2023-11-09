@@ -6,12 +6,9 @@
 		<int name="zkClientTimeout">${zkClientTimeout:15000}</int>
 		<bool name="genericCoreNodeNames">${genericCoreNodeNames:true}</bool>
 	</solrcloud>
-
 	<shardHandlerFactory name="shardHandlerFactory"
 						 class="HttpShardHandlerFactory">
 		<int name="socketTimeout">${socketTimeout:0}</int>
 		<int name="connTimeout">${connTimeout:0}</int>
 	</shardHandlerFactory>
-
-	<str name="modules">scripting</str>
 </solr>

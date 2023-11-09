@@ -7,7 +7,7 @@
 
 CMD=$1
 YAML_FILE=/mnt/ddev_config/apache-solr/config.yaml
-SOLR_VOLUME=.ddev/apache-solr/data/
+SOLR_VOLUME=.ddev/apache-solr/data
 SOLR_HOST=apache-solr
 
 case $CMD in
@@ -37,9 +37,10 @@ case $CMD in
       exit 1
     fi
 
-    mkdir -p "$SOLR_VOLUME/configsets"
+    sudo mkdir -p "${SOLR_VOLUME:?}/configsets"
     cp -r "${solr_config}" "$SOLR_VOLUME"
-    cp -r "$configset" "${SOLR_VOLUME:?}configsets/$(basename $configset)"
+    sudo chmod -R 777 "$SOLR_VOLUME"
+    cp -r "$configset" "${SOLR_VOLUME:?}/configsets/$(basename $configset)"
     readarray cores_array < <(yq -o=j -I=0 '.cores.[]' $YAML_FILE)
 
     for core in "${cores_array[@]}"; do
@@ -52,7 +53,6 @@ case $CMD in
       status=$(echo $response | yq '.responseHeader.status')
 
       if [ "$response_code" -gt 0 ]; then
-        echo curl --fail -s "$api_url"
         echo "❌ Failed to call solr API on $api_url"
         exit 1
       fi
@@ -94,13 +94,10 @@ case $CMD in
             error_message=$(echo "$response" | yq '.error.msg')
             echo "ℹ️ Core '$name' - $error_message"
         fi
-
-        rm -rf "${SOLR_VOLUME:?}$name"
       done
     fi
 
-    rm -rf "${SOLR_VOLUME:?}configsets"
-    rm -rf "${SOLR_VOLUME:?}solr.xml"
+    rm -rf "${SOLR_VOLUME:?}/configsets"
     ;;
 
   --help|*)
