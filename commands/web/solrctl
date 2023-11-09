@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 
-## Description: Manage parts of solr
+## Description: Create and destroy solr cores and configsets
 ## Usage: solrctl
 ## Example: ddev solrctl
 
@@ -22,7 +22,6 @@ case $CMD in
       exit 1
     fi
 
-    # @todo: Failed to call solr API on $api_url - implement a funtion to check availability
     echo "Apply config $YAML_FILE"
 
     solr_config="$PWD/$(yq eval '.solr_config' "$YAML_FILE")"
