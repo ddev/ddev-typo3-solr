@@ -1,10 +1,12 @@
-# Apache Solr (standalone)
+# Apache Solr Add-On for DDEV (standalone)
 
-This add-on provides a Solr standalone (no cloud) service for ddev and
+This DDEV add-on provides a Solr standalone (no cloud) service for DDEV and
 creates Solr cores according to the configuration defined in `.ddev/apache-solr/config.yaml`.
 
-Because some Solr integrations (e.g. TYPO3 Solr) do not work
-in cloud mode this add-on was created.
+This add-on is meant to be a simple integration for DDEV, as it does not
+work with Solr Cloud and only for Solr standalone. Most web projects use
+Solr in standalone-mode so this add-on simulates this behaviour for
+local environments.
 
 ## Installation 
 
@@ -12,9 +14,11 @@ in cloud mode this add-on was created.
 ddev get b13/ddev-apache-solr && ddev restart
 ```
 
-### Create cores and its configuration:
+## Configuration
 
-Configuration example for TYPO3
+### Create cores and its configuration
+
+Configuration example for TYPO3 in `.ddev/apache-solr/config.yaml`:
 
 ```yaml
 solr_config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
@@ -26,11 +30,11 @@ cores:
     schema: "german/schema.xml"
 ```
 
-```
+```bash
 ddev solrctl apply
 ```
 
-### Delete cores and its configuration:
+### Delete cores and its configuration
 
 ```
 ddev solrctl wipe
@@ -38,7 +42,7 @@ ddev solrctl wipe
 
 > [!NOTE]  
 > After running `wipe`, it may take a few seconds until files are synced which may 
-> cause issues when running `apply` straight after `wipe`
+> cause issues when running `apply` straight after `wipe`.
 
 ### Running the solr control script
 
