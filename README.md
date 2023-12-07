@@ -34,6 +34,14 @@ cores:
 ddev solrctl apply
 ```
 
+To ensure the cores are created automatically on boot, add the following hook to your `.ddev/config.yaml`:
+
+```yaml
+hooks:
+  post-start:
+    - exec-host: ddev solrctl apply
+```
+
 ### Delete cores and its configuration
 
 ```
