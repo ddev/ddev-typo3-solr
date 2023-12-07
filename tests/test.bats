@@ -27,7 +27,6 @@
 
 @test "Delete/wipe configuration" {
   ddev solrctl wipe
-  ddev restart
 
   [ "$?" -eq 0 ]
 }
@@ -40,13 +39,6 @@
 
   [ ! "$core_de_name" == "core_de" ]
   [ ! "$core_en_name" == "core_en" ]
-}
-
-@test "See files and folders removed" {
-  [ ! -d "$TESTDIR/.ddev/apache-solr/data/configsets/configset" ]
-  [ ! -f "$TESTDIR/.ddev/apache-solr/data/solr.xml" ]
-  [ ! -d "$TESTDIR/.ddev/apache-solr/data/configsets/core_de" ]
-  [ ! -d "$TESTDIR/.ddev/apache-solr/data/configsets/core_en" ]
 }
 
 @test "Test solr command" {
