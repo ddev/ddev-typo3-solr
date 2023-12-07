@@ -27,6 +27,7 @@
 
 @test "Delete/wipe configuration" {
   ddev solrctl wipe
+  ddev restart
 
   [ "$?" -eq 0 ]
 }

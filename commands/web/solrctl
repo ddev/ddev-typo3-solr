@@ -96,7 +96,7 @@ case $CMD in
       done
     fi
 
-    rm -rf "${SOLR_VOLUME}"
+    rm -rf "${SOLR_VOLUME:?}/*"
     ;;
 
   --help|*)
