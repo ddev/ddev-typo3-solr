@@ -1,8 +1,8 @@
 #ddev-generated
-# @todo: allow to define a version??!?!
+# @todo: Allow to define a version
 # solr_version: ''
 
-solr_config: 'tests/testdata/solr.xml'
+config: 'tests/testdata/solr.xml'
 configset: 'tests/testdata/configset/'
 cores:
   - name: "core_en"

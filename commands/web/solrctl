@@ -24,9 +24,9 @@ case $CMD in
 
     echo "Apply config $YAML_FILE"
 
-    solr_config="$PWD/$(yq eval '.solr_config' "$YAML_FILE")"
-    if [ ! -f "$solr_config" ]; then
-      echo "Solr config file $solr_config does not exist."
+    config="$PWD/$(yq eval '.config' "$YAML_FILE")"
+    if [ ! -f "$config" ]; then
+      echo "Solr config file $config does not exist."
       exit 1
     fi
 
@@ -37,7 +37,7 @@ case $CMD in
     fi
 
     sudo mkdir -p "${SOLR_VOLUME:?}/configsets"
-    cp -r "${solr_config}" "$SOLR_VOLUME"
+    cp -r "${config}" "$SOLR_VOLUME"
     sudo chmod -R 777 "$SOLR_VOLUME"
     cp -r "$configset" "${SOLR_VOLUME:?}/configsets/$(basename $configset)"
     readarray cores_array < <(yq -o=j -I=0 '.cores.[]' $YAML_FILE)
@@ -96,7 +96,7 @@ case $CMD in
       done
     fi
 
-    rm -rf "${SOLR_VOLUME:?}/configsets"
+    rm -rf "${SOLR_VOLUME}"
     ;;
 
   --help|*)

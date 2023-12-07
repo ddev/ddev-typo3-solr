@@ -21,7 +21,7 @@ ddev get b13/ddev-apache-solr && ddev restart
 Configuration example for TYPO3 in `.ddev/apache-solr/config.yaml`:
 
 ```yaml
-solr_config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
+config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
 configset: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/configsets/ext_solr_12_0_0'
 cores:
   - name: "core_en"
