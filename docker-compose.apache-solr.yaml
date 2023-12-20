@@ -9,8 +9,11 @@ services:
       com.ddev.approot: $DDEV_APPROOT
     environment:
       - VIRTUAL_HOST=$DDEV_HOSTNAME
-      - HTTPS_EXPOSE=8983
       - HTTP_EXPOSE=8983
+      - HTTPS_EXPOSE=8984:8983
+      # For setup steps see https://docs.typo3.org/p/apache-solr-for-typo3/solr/main/en-us/Solr/ConfigurationStructures.html#setup-steps
+      - SOLR_ENABLE_REMOTE_STREAMING=true
+      - SOLR_ENABLE_STREAM_BODY=true
     volumes:
       - "./apache-solr/data:/var/solr/data"
       - ".:/mnt/ddev_config"
