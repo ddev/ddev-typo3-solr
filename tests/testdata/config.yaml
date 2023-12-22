@@ -1,6 +1,4 @@
 #ddev-generated
-# @todo: Allow to define a version
-# solr_version: ''
 
 config: 'tests/testdata/solr.xml'
 configset: 'tests/testdata/configset/'

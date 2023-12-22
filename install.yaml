@@ -4,5 +4,5 @@ name: apache-solr
 project_files:
   - docker-compose.apache-solr.yaml
   - apache-solr/config.yaml
-  - commands/web/solrctl
+  - commands/host/solrctl
   - commands/apache-solr/solr

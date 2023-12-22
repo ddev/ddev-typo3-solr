@@ -15,8 +15,10 @@ services:
       - SOLR_ENABLE_REMOTE_STREAMING=true
       - SOLR_ENABLE_STREAM_BODY=true
     volumes:
-      - "./apache-solr/data:/var/solr/data"
+      - "apache-solr:/var/solr/"
       - ".:/mnt/ddev_config"
   web:
     links:
       - apache-solr
+volumes:
+  apache-solr:

@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+#ddev-generated
+
+## Description: Create and destroy solr cores and configsets
+## Usage: solrctl
+## Example: ddev solrctl
+
+CMD=$1
+YAML_FILE=".ddev/apache-solr/config.yaml"
+
+# Use yq container, because the user may not have yq installed locally.
+yqd() {
+    docker run --rm -i mikefarah/yq "$@"
+}
+
+wait_for_solr() {
+    while true; do
+        result=$(ddev exec -s apache-solr bin/solr status | grep "/var/solr/data")
+
+        if [ -n "$result" ]; then
+            return 0
+        else
+            sleep 1
+        fi
+    done
+}
+
+# Start the project if not already running, so we can interact with solr
+ddev_status=$(ddev describe -j | yqd -p=json eval '.raw.status')
+if [ "$ddev_status" = "stopped" ]; then
+    ddev start
+fi
+
+case $CMD in
+apply)
+    if [ -n "$2" ]; then
+        YAML_FILE="$2"
+    fi
+
+    if [ ! -f "$YAML_FILE" ]; then
+        echo "Add-on config file $YAML_FILE does not exist."
+        exit 1
+    fi
+
+    echo "Apply config $YAML_FILE"
+    config="${DDEV_APPROOT}/$(yqd eval '.config' <"$YAML_FILE")"
+    if [ ! -f "$config" ]; then
+        echo "Solr config file $config does not exist."
+        exit 1
+    fi
+
+    configset="${DDEV_APPROOT}/$(yqd eval '.configset' <"$YAML_FILE")"
+    if [ ! -d "$configset" ]; then
+        echo "Solr configset $configset does not exist."
+        exit 1
+    fi
+
+    # Copy files to the apache-solr volume
+    echo "Copy $(basename $config) and $(basename $configset) to container"
+    docker exec -i ddev-"${DDEV_SITENAME}"-apache-solr mkdir -p /var/solr/data/configsets/
+    docker cp -q "${config}" ddev-"${DDEV_SITENAME}"-apache-solr:/var/solr/data/
+    docker cp -q "${configset}" ddev-"${DDEV_SITENAME}"-apache-solr:/var/solr/data/configsets/
+    docker restart ddev-"${DDEV_SITENAME}"-apache-solr 1>/dev/null
+
+    wait_for_solr
+
+    # Create solr cores if needed
+    readarray cores_array < <(yqd -o=j -I=0 '.cores.[]' <"$YAML_FILE")
+    for core in "${cores_array[@]}"; do
+        name=$(echo "$core" | yqd '.name // ""' -)
+        schema=$(echo "$core" | yqd '.schema // ""' -)
+
+        api_url="https://${DDEV_HOSTNAME}:8984/solr/admin/cores?action=CREATE&name=${name}&configSet=$(basename $configset)&schema=${schema}&dataDir=./"
+        response=$(curl -s "$api_url")
+        response_code=$?
+        status=$(echo $response | yqd '.responseHeader.status')
+
+        if [ "$response_code" -gt 0 ]; then
+            echo "❌ Failed to call solr API on $api_url"
+            exit 1
+        fi
+
+        if [ "$status" -eq 0 ]; then
+            echo "✅ Core '$name' created"
+        else
+            error_message=$(echo "$response" | yqd '.error.msg')
+            echo "ℹ️ $error_message"
+        fi
+    done
+    ;;
+
+wipe)
+    api_url="https://${DDEV_HOSTNAME}:8984/solr/admin/cores?action=STATUS&wt=json"
+    response=$(curl -s "$api_url")
+    response_code=$?
+    status=$(echo $response | yqd '.responseHeader.status')
+
+    if [ "$response_code" -gt 0 ]; then
+        echo "❌ Failed to call solr API on $api_url"
+    else
+        readarray cores_array < <(echo $response | yqd -o=j -I=0 '.status.[] // 0')
+
+        if [ "$(echo -n "${cores_array[@]}")" != "0" ]; then
+            for core in "${cores_array[@]}"; do
+                name=$(echo "$core" | yqd '.name // ""' -)
+                api_delete_url="https://${DDEV_HOSTNAME}:8984/solr/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
+                response=$(curl -s -X POST -H 'Content-type: application/json' "$api_delete_url")
+                response_code=$?
+                status=$(echo $response | yqd '.responseHeader.status')
+
+                if [ "$status" -eq 0 ]; then
+                    echo "✅ Core '$name' deleted"
+                else
+                    error_message=$(echo "$response" | yqd '.error.msg')
+                    echo "ℹ️ Core '$name' - $error_message"
+                fi
+            done
+        fi
+    fi
+
+    # Delete all files in the
+    docker exec -u 0 -i ddev-"${DDEV_SITENAME}"-apache-solr rm -Rf /var/solr/data/configsets /var/solr/data/solr.xml
+    docker restart ddev-"${DDEV_SITENAME}"-apache-solr 1>/dev/null
+
+    wait_for_solr
+    ;;
+
+--help | *)
+    echo "——————————————"
+    echo -e "\033[1mExample Usage:\033[0m"
+    echo "——————————————"
+    echo -e "\033[1mApply\033[0m"
+    echo "—————"
+    echo "Create solr cores and configsets defined in .ddev/apache-solr/config.yaml"
+    echo "👉 ddev solrctl apply [config path] - relative to docroot, optional"
+    echo ""
+    echo -e "\033[1mWipe\033[0m"
+    echo "—————"
+    echo "Remove solr cores and configset"
+    echo "👉 ddev solrctl wipe"
+    ;;
+esac
