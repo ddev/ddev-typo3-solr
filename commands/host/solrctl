@@ -43,49 +43,59 @@ apply)
     fi
 
     echo "Apply config $YAML_FILE"
-    config="${DDEV_APPROOT}/$(yqd eval '.config' <"$YAML_FILE")"
+
+    YAML=$(cat "$YAML_FILE")
+    config="${DDEV_APPROOT}/$(echo "$YAML" | yqd eval '.config')"
+
     if [ ! -f "$config" ]; then
         echo "Solr config file $config does not exist."
         exit 1
     fi
 
-    configset="${DDEV_APPROOT}/$(yqd eval '.configset' <"$YAML_FILE")"
-    if [ ! -d "$configset" ]; then
-        echo "Solr configset $configset does not exist."
-        exit 1
-    fi
-
     # Copy files to the apache-solr volume
-    echo "Copy $(basename $config) and $(basename $configset) to container"
     docker exec -i ddev-"${DDEV_SITENAME}"-apache-solr mkdir -p /var/solr/data/configsets/
+    echo "🐳 Copy $(basename "$config") to container"
     docker cp -q "${config}" ddev-"${DDEV_SITENAME}"-apache-solr:/var/solr/data/
-    docker cp -q "${configset}" ddev-"${DDEV_SITENAME}"-apache-solr:/var/solr/data/configsets/
     docker restart ddev-"${DDEV_SITENAME}"-apache-solr 1>/dev/null
-
     wait_for_solr
 
-    # Create solr cores if needed
-    readarray cores_array < <(yqd -o=j -I=0 '.cores.[]' <"$YAML_FILE")
-    for core in "${cores_array[@]}"; do
-        name=$(echo "$core" | yqd '.name // ""' -)
-        schema=$(echo "$core" | yqd '.schema // ""' -)
+    readarray configsets < <(echo "$YAML" | yqd -o=j -I=0 '.configsets.[]')
+    for configset in "${configsets[@]}"; do
+        configset_name=$(echo "$configset" | yqd '.name // ""' -)
+        configset_path="${DDEV_APPROOT}/$(echo "$configset" | yqd '.path // ""' -)"
 
-        api_url="https://${DDEV_HOSTNAME}:8984/solr/admin/cores?action=CREATE&name=${name}&configSet=$(basename $configset)&schema=${schema}&dataDir=./"
-        response=$(curl -s "$api_url")
-        response_code=$?
-        status=$(echo $response | yqd '.responseHeader.status')
-
-        if [ "$response_code" -gt 0 ]; then
-            echo "❌ Failed to call solr API on $api_url"
+        if [ ! -d "$configset_path" ]; then
+            echo -e "Solr configset '${configset_name}' does not exist."
             exit 1
         fi
 
-        if [ "$status" -eq 0 ]; then
-            echo "✅ Core '$name' created"
-        else
-            error_message=$(echo "$response" | yqd '.error.msg')
-            echo "ℹ️ $error_message"
-        fi
+        echo "🐳 Copy configset '$configset_name' to container"
+        docker cp -q "${configset_path}/." "ddev-$DDEV_SITENAME-apache-solr:/var/solr/data/configsets/$configset_name"
+
+        # Create solr cores if needed
+        readarray cores_array < <(echo "$configset" | yqd -o=j -I=0 '.cores.[]')
+        for core in "${cores_array[@]}"; do
+            name=$(echo "$core" | yqd '.name // ""' -)
+            schema=$(echo "$core" | yqd '.schema // ""' -)
+
+            # @todo: USE CLI COMMAND?!??!!?! ddev solr create
+            api_url="https://${DDEV_HOSTNAME}:8984/solr/admin/cores?action=CREATE&name=${name}&configSet=${configset_name}&schema=${schema}&dataDir=./"
+            response=$(curl -s "$api_url")
+            response_code=$?
+            status=$(echo $response | yqd '.responseHeader.status')
+
+            if [ "$response_code" -gt 0 ]; then
+                echo "❌ Failed to call solr API on $api_url"
+                exit 1
+            fi
+
+            if [ "$status" -eq 0 ]; then
+                echo "✅  Core '$name' created"
+            else
+                error_message=$(echo "$response" | yqd '.error.msg')
+                echo "ℹ️ $error_message"
+            fi
+        done
     done
     ;;
 
@@ -109,7 +119,7 @@ wipe)
                 status=$(echo $response | yqd '.responseHeader.status')
 
                 if [ "$status" -eq 0 ]; then
-                    echo "✅ Core '$name' deleted"
+                    echo "🗑️Deleted core '$name' "
                 else
                     error_message=$(echo "$response" | yqd '.error.msg')
                     echo "ℹ️ Core '$name' - $error_message"
@@ -119,6 +129,7 @@ wipe)
     fi
 
     # Delete all files in the
+    echo "🗑️Delete all configsets and solr.xml configuration"
     docker exec -u 0 -i ddev-"${DDEV_SITENAME}"-apache-solr rm -Rf /var/solr/data/configsets /var/solr/data/solr.xml
     docker restart ddev-"${DDEV_SITENAME}"-apache-solr 1>/dev/null
 

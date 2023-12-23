@@ -30,8 +30,9 @@
 @test "Delete/wipe configuration" {
     run ddev solrctl wipe
 
-    [[ "$output" == *"Core 'core_de' deleted"* ]]
-    [[ "$output" == *"Core 'core_en' deleted"* ]]
+    [[ "$output" == *"Deleted core 'core_de'"* ]]
+    [[ "$output" == *"Deleted core 'core_en'"* ]]
+    [[ "$output" == *"Delete all configsets and solr.xml configuration"* ]]
 }
 
 @test "See cores do not exist anymore" {
