@@ -14,15 +14,7 @@ yqd() {
 }
 
 wait_for_solr() {
-    while true; do
-        result=$(ddev exec -s apache-solr bin/solr status | grep "/var/solr/data")
-
-        if [ -n "$result" ]; then
-            return 0
-        else
-            sleep 1
-        fi
-    done
+    ddev exec -s apache-solr wait-for-solr.sh --wait-seconds 1
 }
 
 # Start the project if not already running, so we can interact with solr
