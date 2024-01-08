@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
 #ddev-generated
-
 ## Description: Create and destroy solr cores and configsets
 ## Usage: solrctl
 ## Example: ddev solrctl
-
 CMD=$1
 YAML_FILE=".ddev/apache-solr/config.yaml"
-
 # Use yq container, because the user may not have yq installed locally.
 yqd() {
     docker run --rm -i mikefarah/yq "$@"
 }
-
 wait_for_solr() {
     ddev exec -s apache-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
 }
-
 create_core() {
     name="${1}"
     configset="${2}"
     schema="${3}"
-
     if [ "$configset" = "" ]; then
         echo "❌ Please define a configset!"
         exit 1
     fi
-
     # Schema
     schema_param=""
     if [ ! "$schema" = "" ]; then
@@ -135,7 +128,7 @@ wipe)
     if [ "$response_code" -gt 0 ]; then
         echo "❌ Failed to call solr API on $api_url"
     else
-        IFS=$'\n' cores_array=($(echo "$configset" | yqd -o=j -I=0 '.cores.[]'))
+        IFS=$'\n' cores_array=($(echo "$response" | yqd -o=j -I=0 '.status.[] // 0'))
         if [ "$(echo -n "${cores_array[@]}")" != "0" ]; then
             for core in "${cores_array[@]}"; do
                 name=$(echo "$core" | yqd '.name // ""' -)
