@@ -1,11 +1,11 @@
 #ddev-generated
-# @todo: Allow to define a version
-# solr_version: ''
 
-config: 'tests/testdata/solr.xml'
-configset: 'tests/testdata/configset/'
-cores:
-  - name: "core_en"
-    schema: "english/schema.xml"
-  - name: "core_de"
-    schema: "german/schema.xml"
+config: "tests/testdata/solr.xml"
+configsets:
+  - name: "example_configset"
+    path: "tests/testdata/configset/"
+    cores:
+      - name: "core_en"
+        schema: "english/schema.xml"
+      - name: "core_de"
+        schema: "german/schema.xml"
