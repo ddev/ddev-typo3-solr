@@ -99,11 +99,11 @@ apply)
     # Copy files to the apache-solr volume
     docker exec -i ddev-"$DDEV_SITENAME"-apache-solr mkdir -p /var/solr/data/configsets/
     echo "🐳 Copy $(basename "$config") to container"
-    docker cp -q "$config" ddev-"$DDEV_SITENAME"-apache-solr:/var/solr/data/
+    docker cp "$config" ddev-"$DDEV_SITENAME"-apache-solr:/var/solr/data/ 1>/dev/null
     docker restart ddev-"$DDEV_SITENAME"-apache-solr 1>/dev/null
     wait_for_solr
 
-    readarray configsets < <(echo "$YAML" | yqd -o=j -I=0 '.configsets.[]')
+    IFS=$'\n' configsets=($(echo "$YAML" | yqd -o=j -I=0 '.configsets.[]'))
     for configset in "${configsets[@]}"; do
         configset_name=$(echo "$configset" | yqd '.name // ""' -)
         configset_path="$DDEV_APPROOT/$(echo "$configset" | yqd '.path // ""' -)"
@@ -114,10 +114,10 @@ apply)
         fi
 
         echo "🐳 Copy configset '$configset_name' to container"
-        docker cp -q "$configset_path/." "ddev-$DDEV_SITENAME-apache-solr:/var/solr/data/configsets/$configset_name"
+        docker cp "$configset_path/." "ddev-$DDEV_SITENAME-apache-solr:/var/solr/data/configsets/$configset_name" 1>/dev/null
 
         # Create solr cores if needed
-        readarray cores_array < <(echo "$configset" | yqd -o=j -I=0 '.cores.[]')
+        IFS=$'\n' cores_array=($(echo "$configset" | yqd -o=j -I=0 '.cores.[]'))
         for core in "${cores_array[@]}"; do
             name=$(echo "$core" | yqd '.name // ""' -)
             schema=$(echo "$core" | yqd '.schema // ""' -)
@@ -135,7 +135,7 @@ wipe)
     if [ "$response_code" -gt 0 ]; then
         echo "❌ Failed to call solr API on $api_url"
     else
-        readarray cores_array < <(echo "$response" | yqd -o=j -I=0 '.status.[] // 0')
+        IFS=$'\n' cores_array=($(echo "$configset" | yqd -o=j -I=0 '.cores.[]'))
         if [ "$(echo -n "${cores_array[@]}")" != "0" ]; then
             for core in "${cores_array[@]}"; do
                 name=$(echo "$core" | yqd '.name // ""' -)
