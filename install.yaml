@@ -1,8 +1,8 @@
 # Details about the install.yaml file are at https://ddev.readthedocs.io/en/latest/users/extend/additional-services/#sections-and-features-of-ddev-get-add-on-installyaml
-name: apache-solr
+name: typo3-solr
 
 project_files:
-  - docker-compose.apache-solr.yaml
-  - apache-solr/config.yaml
+  - docker-compose.typo3-solr.yaml
+  - typo3-solr/config.yaml
   - commands/host/solrctl
-  - commands/apache-solr/solr
+  - commands/typo3-solr/solr

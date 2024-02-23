@@ -3,9 +3,9 @@
 setup_suite() {
   export DIR="$( cd "$( dirname "$BATS_TEST_FILENAME" )" >/dev/null 2>&1 && pwd )"
   set -eu -o pipefail
-  export TESTDIR=~/tmp/test-apache-solr-addon
+  export TESTDIR=~/tmp/test-typo3-solr-addon
   mkdir -p $TESTDIR
-  export PROJNAME=test-addon-apache-solr
+  export PROJNAME=test-addon-typo3-solr
   export DDEV_NON_INTERACTIVE=true
 
   ddev delete -Oy ${PROJNAME} >/dev/null 2>&1 || true

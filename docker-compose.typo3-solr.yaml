@@ -1,8 +1,8 @@
 #ddev-generated
 services:
-  apache-solr:
-    container_name: ddev-${DDEV_SITENAME}-apache-solr
-    hostname: ${DDEV_SITENAME}-apache-solr
+  typo3-solr:
+    container_name: ddev-${DDEV_SITENAME}-typo3-solr
+    hostname: ${DDEV_SITENAME}-typo3-solr
     image: solr:9.4
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
@@ -15,10 +15,10 @@ services:
       - SOLR_ENABLE_REMOTE_STREAMING=true
       - SOLR_ENABLE_STREAM_BODY=true
     volumes:
-      - "apache-solr:/var/solr/"
+      - "typo3-solr:/var/solr/"
       - ".:/mnt/ddev_config"
   web:
     links:
-      - apache-solr
+      - typo3-solr
 volumes:
-  apache-solr:
+  typo3-solr:

@@ -4,13 +4,13 @@
 ## Usage: solrctl
 ## Example: ddev solrctl
 CMD=$1
-YAML_FILE=".ddev/apache-solr/config.yaml"
+YAML_FILE=".ddev/typo3-solr/config.yaml"
 # Use yq container, because the user may not have yq installed locally.
 yqd() {
     docker run --rm -i mikefarah/yq "$@"
 }
 wait_for_solr() {
-    ddev exec -s apache-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
+    ddev exec -s typo3-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
 }
 create_core() {
     name="${1}"
@@ -26,7 +26,7 @@ create_core() {
         schema_param="&schema=$schema"
     fi
     api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=CREATE&name=$name&configSet=$configset&dataDir=./$schema_param"
-    response=$(ddev exec -s apache-solr "curl -s '$api_url'")
+    response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
     response_code=$?
     status=$(echo "$response" | yqd '.responseHeader.status')
 
@@ -49,12 +49,12 @@ create_core() {
 
 delete_core() {
     api_delete_url="http://localhost:8983/solr/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
-    response=$(ddev exec -s apache-solr "curl -s -X POST -H 'Content-type: application/json' '$api_delete_url'")
+    response=$(ddev exec -s typo3-solr "curl -s -X POST -H 'Content-type: application/json' '$api_delete_url'")
     response_code=$?
     status=$(echo "$response" | yqd '.responseHeader.status')
 
     if [ "$status" -eq 0 ]; then
-        docker exec -u 0 -i ddev-"$DDEV_SITENAME"-apache-solr rm -Rf /var/solr/data/"$name"
+        docker exec -u 0 -i ddev-"$DDEV_SITENAME"-typo3-solr rm -Rf /var/solr/data/"$name"
         echo "🗑️Deleted core '$name' "
     else
         error_message=$(echo "$response" | yqd '.error.msg')
@@ -89,11 +89,11 @@ apply)
         exit 1
     fi
 
-    # Copy files to the apache-solr volume
-    docker exec -i ddev-"$DDEV_SITENAME"-apache-solr mkdir -p /var/solr/data/configsets/
+    # Copy files to the typo3-solr volume
+    docker exec -i ddev-"$DDEV_SITENAME"-typo3-solr mkdir -p /var/solr/data/configsets/
     echo "🐳 Copy $(basename "$config") to container"
-    docker cp "$config" ddev-"$DDEV_SITENAME"-apache-solr:/var/solr/data/ 1>/dev/null
-    docker restart ddev-"$DDEV_SITENAME"-apache-solr 1>/dev/null
+    docker cp "$config" ddev-"$DDEV_SITENAME"-typo3-solr:/var/solr/data/ 1>/dev/null
+    docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
     wait_for_solr
 
     IFS=$'\n' configsets=($(echo "$YAML" | yqd -o=j -I=0 '.configsets.[]'))
@@ -107,7 +107,7 @@ apply)
         fi
 
         echo "🐳 Copy configset '$configset_name' to container"
-        docker cp "$configset_path/." "ddev-$DDEV_SITENAME-apache-solr:/var/solr/data/configsets/$configset_name" 1>/dev/null
+        docker cp "$configset_path/." "ddev-$DDEV_SITENAME-typo3-solr:/var/solr/data/configsets/$configset_name" 1>/dev/null
 
         # Create solr cores if needed
         IFS=$'\n' cores_array=($(echo "$configset" | yqd -o=j -I=0 '.cores.[]'))
@@ -122,7 +122,7 @@ apply)
 
 wipe)
     api_url="http://localhost:8983/solr/admin/cores?action=STATUS&wt=json"
-    response=$(ddev exec -s apache-solr bin/solr api -get "$api_url")
+    response=$(ddev exec -s typo3-solr bin/solr api -get "$api_url")
     response_code=$?
 
     if [ "$response_code" -gt 0 ]; then
@@ -140,8 +140,8 @@ wipe)
 
     # Delete all files in the
     echo "🗑️Delete all configsets and solr.xml configuration"
-    docker exec -u 0 -i ddev-"$DDEV_SITENAME"-apache-solr rm -Rf /var/solr/data/configsets /var/solr/data/solr.xml
-    docker restart ddev-"$DDEV_SITENAME"-apache-solr 1>/dev/null
+    docker exec -u 0 -i ddev-"$DDEV_SITENAME"-typo3-solr rm -Rf /var/solr/data/configsets /var/solr/data/solr.xml
+    docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
 
     wait_for_solr
     ;;
@@ -152,7 +152,7 @@ wipe)
     echo "——————————————"
     echo -e "\033[1mApply\033[0m"
     echo "—————"
-    echo "Create solr cores and configsets defined in .ddev/apache-solr/config.yaml"
+    echo "Create solr cores and configsets defined in .ddev/typo3-solr/config.yaml"
     echo "👉 ddev solrctl apply [config path] - relative to docroot, optional"
     echo ""
     echo -e "\033[1mWipe\033[0m"

@@ -1,7 +1,7 @@
 # Apache Solr Add-On for DDEV (standalone)
 
 This DDEV add-on provides a Solr standalone (no cloud) service for DDEV and
-creates Solr cores according to the configuration defined in `.ddev/apache-solr/config.yaml`.
+creates Solr cores according to the configuration defined in `.ddev/typo3-solr/config.yaml`.
 
 This add-on is meant to be a simple integration for DDEV, as it does not
 work with Solr Cloud and only for Solr standalone. Most web projects use
@@ -11,14 +11,14 @@ local environments.
 ## Installation
 
 ```bash
-ddev get b13/ddev-apache-solr && ddev restart
+ddev get ddev/ddev-typo3-solr && ddev restart
 ```
 
 ## Configuration
 
 ### Create cores and its configuration
 
-Configuration example for TYPO3 in `.ddev/apache-solr/config.yaml`:
+Configuration example for TYPO3 in `.ddev/typo3-solr/config.yaml`:
 
 ```yaml
 config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
