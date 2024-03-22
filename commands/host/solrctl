@@ -39,10 +39,10 @@ create_core() {
         echo "✅  Core '$name' created"
     elif [ "$status" -eq 500 ]; then
         error_core=$(echo "$response" | yqd '.error.msg')
-        echo "ℹ️ $error_core"
+        echo "ℹ️  $error_core"
     else
         error_message=$(echo "$response" | yqd '.error.msg')
-        echo "❌ $error_message"
+        echo "❌  $error_message"
         exit 1
     fi
 }
