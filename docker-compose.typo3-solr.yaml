@@ -17,6 +17,7 @@ services:
     volumes:
       - "typo3-solr:/var/solr/"
       - ".:/mnt/ddev_config"
+      - "ddev-global-cache:/mnt/ddev-global-cache"
   web:
     links:
       - typo3-solr
