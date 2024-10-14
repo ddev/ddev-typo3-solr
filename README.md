@@ -44,6 +44,16 @@ hooks:
     - exec-host: ddev solrctl apply
 ```
 
+### Example configuration for TYPO3
+To connect to the solr service you have to configure the following lines in your site configuration:
+```yaml
+solr_enabled_read: true
+solr_host_read: <your-site>.ddev.site
+solr_path_read: /
+solr_port_read: '8984'
+solr_scheme_read: https
+```
+
 ### Delete cores and its configuration
 
 ```
