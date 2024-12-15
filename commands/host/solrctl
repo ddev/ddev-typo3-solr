@@ -5,10 +5,7 @@
 ## Example: ddev solrctl
 CMD=$1
 YAML_FILE=".ddev/typo3-solr/config.yaml"
-# Use yq container, because the user may not have yq installed locally.
-yqd() {
-    docker run --rm -i mikefarah/yq "$@"
-}
+
 wait_for_solr() {
     ddev exec -s typo3-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
 }
@@ -28,7 +25,7 @@ create_core() {
     api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=CREATE&name=$name&configSet=$configset&dataDir=./$schema_param"
     response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
     response_code=$?
-    status=$(echo "$response" | yqd '.responseHeader.status')
+    status=$(echo "$response" | ddev exec "yq '.responseHeader.status'")
 
     if [ "$response_code" -gt 0 ]; then
         echo "❌ Failed to call solr API on $api_url"
@@ -38,10 +35,10 @@ create_core() {
     if [ "$status" = "0" ]; then
         echo "✅ Core '$name' created"
     elif [ "$status" = "500" ]; then
-        error_core=$(echo "$response" | yqd '.error.msg')
+        error_core=$(echo "$response" | ddev exec "yq '.error.msg'")
         echo "ℹ️ $error_core"
     else
-        error_message=$(echo "$response" | yqd '.error.msg')
+        error_message=$(echo "$response" | ddev exec "yq '.error.msg'")
         echo "❌ $error_message"
         exit 1
     fi
@@ -51,19 +48,19 @@ delete_core() {
     api_delete_url="http://localhost:8983/solr/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
     response=$(ddev exec -s typo3-solr "curl -s -X POST -H 'Content-type: application/json' '$api_delete_url'")
     response_code=$?
-    status=$(echo "$response" | yqd '.responseHeader.status')
+    status=$(echo "$response" | ddev exec "yq '.responseHeader.status'")
 
     if [ "$status" -eq 0 ]; then
         docker exec -u 0 -i ddev-"$DDEV_SITENAME"-typo3-solr rm -Rf /var/solr/data/"$name"
         echo "🗑️Deleted core '$name' "
     else
-        error_message=$(echo "$response" | yqd '.error.msg')
+        error_message=$(echo "$response" | ddev exec "yq '.error.msg'")
         echo "ℹ️ Core '$name' - $error_message"
     fi
 }
 
 # Start the project if not already running, so we can interact with solr
-ddev_status=$(ddev describe -j | yqd -p=json eval '.raw.status')
+ddev_status=$(ddev describe -j | ddev exec "yq -p=json eval '.raw.status'")
 if [ "$ddev_status" = "stopped" ]; then
     ddev start
 fi
@@ -82,7 +79,7 @@ apply)
     echo "Apply config $YAML_FILE"
 
     YAML=$(cat "$YAML_FILE")
-    config="$DDEV_APPROOT/$(echo "$YAML" | yqd eval '.config')"
+    config="$DDEV_APPROOT/$(echo "$YAML" | ddev exec "yq eval '.config'")"
 
     if [ ! -f "$config" ]; then
         echo "Solr config file $config does not exist."
@@ -97,10 +94,20 @@ apply)
     docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
     wait_for_solr
 
-    IFS=$'\n' configsets=($(echo "$YAML" | yqd -o=j -I=0 '.configsets.[]'))
+    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS"
+    response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
+    response_code=$?
+    existing_cores=$(echo "$response" | ddev exec "yq -r '.status | keys | .[]'")
+
+    if [ "$response_code" -gt 0 ]; then
+        echo "❌ Failed to call solr API on $api_url"
+        exit 1
+    fi
+
+    IFS=$'\n' configsets=($(echo "$YAML" | ddev exec "yq -o=j -I=0 '.configsets.[]'"))
     for configset in "${configsets[@]}"; do
-        configset_name=$(echo "$configset" | yqd '.name // ""' -)
-        configset_path="$DDEV_APPROOT/$(echo "$configset" | yqd '.path // ""' -)"
+        configset_name=$(echo "$configset" | ddev exec "yq '.name // \"\"' -")
+        configset_path="$DDEV_APPROOT/$(echo "$configset" | ddev exec "yq '.path // \"\"' -")"
 
         if [ ! -d "$configset_path" ]; then
             echo -e "Solr configset '$configset_name' does not exist."
@@ -112,12 +119,16 @@ apply)
         docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr "/var/solr/data/configsets/$configset_name"
 
         # Create solr cores if needed
-        IFS=$'\n' cores_array=($(echo "$configset" | yqd -o=j -I=0 '.cores.[]'))
+        IFS=$'\n' cores_array=($(echo "$configset" | ddev exec "yq -o=j -I=0 '.cores.[]'"))
         for core in "${cores_array[@]}"; do
-            name=$(echo "$core" | yqd '.name // ""' -)
-            schema=$(echo "$core" | yqd '.schema // ""' -)
+            name=$(echo "$core" | ddev exec "yq '.name // \"\"' -")
+            schema=$(echo "$core" | ddev exec "yq '.schema // \"\"' -")
 
-            create_core "$name" "$configset_name" "$schema"
+            if [[ "${existing_cores[*]}" =~ (^|[[:space:]])"$name"($|[[:space:]]) ]]; then
+              echo "ℹ️ Core with name '$name' already exists."
+            else
+              create_core "$name" "$configset_name" "$schema"
+            fi
         done
     done
     ;;
@@ -130,10 +141,10 @@ wipe)
     if [ "$response_code" -gt 0 ]; then
         echo "❌ Failed to call solr API on $api_url"
     else
-        IFS=$'\n' cores_array=($(echo "$response" | yqd -o=j -I=0 '.status.[] // 0'))
+        IFS=$'\n' cores_array=($(echo "$response" | ddev exec "yq -o=j -I=0 '.status.[] // 0'"))
         if [ "$(echo -n "${cores_array[@]}")" != "0" ]; then
             for core in "${cores_array[@]}"; do
-                name=$(echo "$core" | yqd '.name // ""' -)
+                name=$(echo "$core" | ddev exec "yq '.name // \"\"' -")
 
                 delete_core "$name"
             done
