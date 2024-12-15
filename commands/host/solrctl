@@ -45,7 +45,7 @@ create_core() {
 }
 
 delete_core() {
-    api_delete_url="http://localhost:8983/solr/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
+    api_delete_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
     response=$(ddev exec -s typo3-solr "curl -s -X POST -H 'Content-type: application/json' '$api_delete_url'")
     response_code=$?
     status=$(echo "$response" | ddev exec "yq '.responseHeader.status'")
@@ -134,7 +134,7 @@ apply)
     ;;
 
 wipe)
-    api_url="http://localhost:8983/solr/admin/cores?action=STATUS&wt=json"
+    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS&wt=json"
     response=$(ddev exec -s typo3-solr bin/solr api -get "$api_url")
     response_code=$?
 
