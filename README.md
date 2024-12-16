@@ -11,7 +11,7 @@ local environments.
 ## Installation
 
 ```bash
-ddev get ddev/ddev-typo3-solr && ddev restart
+ddev add-on get ddev/ddev-typo3-solr && ddev restart
 ```
 
 ## Configuration
