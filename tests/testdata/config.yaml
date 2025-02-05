@@ -6,7 +6,7 @@ typo3libs:
   - path: "tests/testdata/typo3lib"
 configsets:
   - name: "ext_solr_13_0_0"
-    path: "tests/testdata/configset/ext_solr_13_0_0"
+    path: "tests/testdata/configsets/ext_solr_13_0_0"
     cores:
       - name: "core_en"
         schema: "english/schema.xml"

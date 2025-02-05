@@ -3,7 +3,7 @@ services:
   typo3-solr:
     container_name: ddev-${DDEV_SITENAME}-typo3-solr
     hostname: ${DDEV_SITENAME}-typo3-solr
-    image: typo3solr/ext-solr:13.0.1
+    image: solr:9.8
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
       com.ddev.approot: $DDEV_APPROOT
