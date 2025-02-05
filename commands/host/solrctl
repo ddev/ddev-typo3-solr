@@ -91,6 +91,22 @@ apply)
     echo "🐳 Copy $(basename "$config") to container"
     docker cp "$config" ddev-"$DDEV_SITENAME"-typo3-solr:/var/solr/data/ 1>/dev/null
     docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr /var/solr/data/
+
+    IFS=$'\n' typo3libs=($(echo "$YAML" | ddev exec "yq -o=j -I=0 '.typo3libs.[]'"))
+    for typo3lib in "${typo3libs[@]}"; do
+        typo3lib_name=$(echo "$typo3lib" | ddev exec "yq '.name // \"\"' -")
+        typo3lib_path="$DDEV_APPROOT/$(echo "$typo3lib" | ddev exec "yq '.path // \"\"' -")"
+
+        if [ ! -d "$typo3lib_path" ]; then
+            echo -e "Solr typo3lib '$typo3lib_name' does not exist."
+            exit 1
+        fi
+
+        echo "🐳 Copy typo3lib '$typo3lib_name' to container"
+        docker cp "$typo3lib_path/." "ddev-$DDEV_SITENAME-typo3-solr:/var/solr/data/$typo3lib_name" 1>/dev/null
+        docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr "/var/solr/data/$typo3lib_name"
+    done
+
     docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
     wait_for_solr
 
