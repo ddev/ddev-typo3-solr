@@ -2,11 +2,11 @@
 
 config: "tests/testdata/solr.xml"
 typo3libs:
-  - name: "typo3lib"
+  - name: "example_typo3lib"
   - path: "tests/testdata/typo3lib"
 configsets:
-  - name: "ext_solr_13_0_0"
-    path: "tests/testdata/configsets/ext_solr_13_0_0"
+  - name: "example_configset"
+    path: "tests/testdata/configset"
     cores:
       - name: "core_en"
         schema: "english/schema.xml"
