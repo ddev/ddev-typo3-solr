@@ -147,7 +147,7 @@ apply)
 
 wipe)
     api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS&wt=json"
-    response=$(ddev exec -s typo3-solr bin/solr api -get "$api_url")
+    response=$(ddev exec -s typo3-solr bin/solr api --solr-url "$api_url")
     response_code=$?
 
     if [ "$response_code" -gt 0 ]; then
