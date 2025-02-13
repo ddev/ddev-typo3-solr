@@ -13,8 +13,8 @@ setup_suite() {
   ddev config --project-name=${PROJNAME}
   ddev start -y >/dev/null
 
-  echo "# ddev get ${DIR} with project ${PROJNAME} in ${TESTDIR} ($(pwd))" >&3
-  ddev get "${DIR}/.."
+  echo "# ddev add-on get ${DIR} with project ${PROJNAME} in ${TESTDIR} ($(pwd))" >&3
+  ddev add-on get "${DIR}/.."
   cp -rf "$DIR" "$TESTDIR/"
   ddev restart -y >/dev/null
 }

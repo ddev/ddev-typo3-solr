@@ -6,9 +6,17 @@
 		<int name="zkClientTimeout">${zkClientTimeout:15000}</int>
 		<bool name="genericCoreNodeNames">${genericCoreNodeNames:true}</bool>
 	</solrcloud>
+
 	<shardHandlerFactory name="shardHandlerFactory"
 						 class="HttpShardHandlerFactory">
 		<int name="socketTimeout">${socketTimeout:0}</int>
 		<int name="connTimeout">${connTimeout:0}</int>
 	</shardHandlerFactory>
+
+	<str name="modules">scripting,analytics,analysis-extras,langid,clustering,extraction,${solr.modules:}</str>
+	<str name="allowPaths">${solr.allowPaths:}</str>
+	<str name="allowUrls">${solr.allowUrls:}</str>
+
+	<!-- TYPO3 Plugins -->
+	<str name="sharedLib">typo3lib/</str>
 </solr>
