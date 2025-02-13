@@ -1,17 +1,8 @@
-<config name="tx_solr-12-0-0--20230602">
+<config name="tx_solr-13-0-0--20240513">
 
 	<luceneMatchVersion>9.3.0</luceneMatchVersion>
 
 	<abortOnConfigurationError>${solr.abortOnConfigurationError:true}</abortOnConfigurationError>
-
-	<lib dir="${solr.install.dir:../../../..}/modules/extraction/lib/" regex=".*\.jar" />
-	<lib dir="${solr.install.dir:../../../..}/modules/clustering/lib/" regex=".*\.jar" />
-	<lib dir="${solr.install.dir:../../../..}/modules/langid/lib/" regex=".*\.jar" />
-	<lib dir="${solr.install.dir:../../../..}/modules/analytics/lib/" regex=".*\.jar" />
-	<lib dir="${solr.install.dir:../../../..}/modules/analysis-extras/lib/" regex=".*\.jar" />
-
-	<!-- TYPO3 Plugins -->
-	<lib dir="typo3lib" regex=".*\.jar" />
 
 	<directoryFactory name="DirectoryFactory"
 					  class="solr.NRTCachingDirectoryFactory"/>
@@ -483,6 +474,9 @@
 	<queryResponseWriter name="json" class="solr.JSONResponseWriter" default="true"/>
 	<queryResponseWriter name="php" class="org.apache.solr.response.PHPResponseWriter"/>
 	<queryResponseWriter name="phps" class="org.apache.solr.response.PHPSerializedResponseWriter"/>
+	<queryResponseWriter name="xslt" class="solr.scripting.xslt.XSLTResponseWriter">
+		<int name="xsltCacheLifetimeSeconds">5</int>
+	</queryResponseWriter>
 	<queryResponseWriter name="javabin" class="org.apache.solr.response.BinaryResponseWriter"/>
 
 	<!-- http://wiki.apache.org/solr/DocTransformers -->

@@ -3,7 +3,7 @@ services:
   typo3-solr:
     container_name: ddev-${DDEV_SITENAME}-typo3-solr
     hostname: ${DDEV_SITENAME}-typo3-solr
-    image: solr:9.4
+    image: solr:9.8
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
       com.ddev.approot: $DDEV_APPROOT
@@ -14,6 +14,7 @@ services:
       # For setup steps see https://docs.typo3.org/p/apache-solr-for-typo3/solr/main/en-us/Solr/ConfigurationStructures.html#setup-steps
       - SOLR_ENABLE_REMOTE_STREAMING=true
       - SOLR_ENABLE_STREAM_BODY=true
+      - SOLR_MODE=standalone
     volumes:
       - "typo3-solr:/var/solr/"
       - ".:/mnt/ddev_config"

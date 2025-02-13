@@ -15,16 +15,11 @@
 }
 
 @test "See expected cores" {
-    result=$(ddev exec "curl -s --fail -H 'Content-Type: application/json' -X GET  \"http://typo3-solr:8983/solr/admin/cores?action=STATUS&wt=json\"")
+    result=$(ddev solrctl list)
 
-    core_de_name=$(echo $result | jq -r -c -S '.status.core_de.name' 2>/dev/null)
-    core_en_name=$(echo $result | jq -r -c -S '.status.core_en.name' 2>/dev/null)
-
-    echo $result
-    echo $core_de_name
-
-    [ "$core_de_name" == "core_de" ]
-    [ "$core_en_name" == "core_en" ]
+    [[ "$result" == *"Found 2 cores"* ]]
+    [[ "$result" == *"* core_de"* ]]
+    [[ "$result" == *"* core_en"* ]]
 }
 
 @test "Delete/wipe configuration" {
@@ -48,5 +43,5 @@
   run ddev solr status
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Found 1 Solr nodes:"* ]]
+  [[ "$output" == *"No Solr nodes are running"* ]]
 }

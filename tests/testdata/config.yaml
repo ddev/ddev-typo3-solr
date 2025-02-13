@@ -1,6 +1,7 @@
 #ddev-generated
 
 config: "tests/testdata/solr.xml"
+typo3lib: "tests/testdata/typo3lib"
 configsets:
   - name: "example_configset"
     path: "tests/testdata/configset/"

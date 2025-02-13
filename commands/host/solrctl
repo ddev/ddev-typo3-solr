@@ -2,13 +2,15 @@
 #ddev-generated
 ## Description: Create and destroy solr cores and configsets
 ## Usage: solrctl
-## Example: ddev solrctl
+## Example: "ddev solrctl"
+
 CMD=$1
 YAML_FILE=".ddev/typo3-solr/config.yaml"
 
 wait_for_solr() {
     ddev exec -s typo3-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
 }
+
 create_core() {
     name="${1}"
     configset="${2}"
@@ -86,10 +88,20 @@ apply)
         exit 1
     fi
 
+    typo3lib="$DDEV_APPROOT/$(echo "$YAML" | ddev exec "yq eval '.typo3lib'")"
+    if [ ! -d "$typo3lib" ]; then
+        echo "The typo3lib folder $typo3lib does not exist."
+        exit 1
+    fi
+
     # Copy files to the typo3-solr volume
     docker exec -i ddev-"$DDEV_SITENAME"-typo3-solr mkdir -p /var/solr/data/configsets/
     echo "🐳 Copy $(basename "$config") to container"
     docker cp "$config" ddev-"$DDEV_SITENAME"-typo3-solr:/var/solr/data/ 1>/dev/null
+
+    echo "🐳 Copy typo3lib to container"
+    docker cp "$typo3lib" ddev-"$DDEV_SITENAME"-typo3-solr:/var/solr/data/ 1>/dev/null
+
     docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr /var/solr/data/
     docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
     wait_for_solr
@@ -157,6 +169,17 @@ wipe)
     docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
 
     wait_for_solr
+    ;;
+
+list)
+    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS"
+    response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
+    cores=($(echo "$response" | ddev exec "yq '.status | keys[]'"))
+
+    echo "Found ${#cores[@]} cores"
+    for core in "${cores[@]}"; do
+        echo " *" $core
+    done
     ;;
 
 --help | *)
