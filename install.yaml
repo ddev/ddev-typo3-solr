@@ -1,4 +1,3 @@
-# Details about the install.yaml file are at https://ddev.readthedocs.io/en/latest/users/extend/additional-services/#sections-and-features-of-ddev-get-add-on-installyaml
 name: typo3-solr
 
 project_files:
@@ -6,3 +5,5 @@ project_files:
   - typo3-solr/config.yaml
   - commands/host/solrctl
   - commands/typo3-solr/solr
+
+ddev_version_constraint: '>= v1.24.3'
