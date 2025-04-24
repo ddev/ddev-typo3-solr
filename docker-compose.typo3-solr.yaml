@@ -3,13 +3,13 @@ services:
   typo3-solr:
     container_name: ddev-${DDEV_SITENAME}-typo3-solr
     hostname: ${DDEV_SITENAME}-typo3-solr
-    image: solr:9.8
+    image: ${SOLR_BASE_IMAGE:-solr:9.8}
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
       com.ddev.approot: $DDEV_APPROOT
     environment:
       - VIRTUAL_HOST=$DDEV_HOSTNAME
-      - HTTP_EXPOSE=8983
+      - HTTP_EXPOSE=8983:8983
       - HTTPS_EXPOSE=8984:8983
       # For setup steps see https://docs.typo3.org/p/apache-solr-for-typo3/solr/main/en-us/Solr/ConfigurationStructures.html#setup-steps
       - SOLR_ENABLE_REMOTE_STREAMING=true
@@ -19,8 +19,6 @@ services:
       - "typo3-solr:/var/solr/"
       - ".:/mnt/ddev_config"
       - "ddev-global-cache:/mnt/ddev-global-cache"
-  web:
-    links:
-      - typo3-solr
+
 volumes:
   typo3-solr:
