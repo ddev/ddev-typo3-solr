@@ -100,14 +100,14 @@ This addon defaults to installing a preferred version of the [docker Solr image]
 # Change image version as appropriate.
 ddev dotenv set .ddev/.env.solr --solr-base-image="solr:9.8"
 
-ddev add-on get ddev/ddev-solr
+ddev add-on get ddev/ddev-typo3-solr
 
 # remove old solr volume (if this is downgrade)
 ddev stop
-docker volume rm ddev-$(ddev status -j | docker run -i --rm ddev/ddev-utilities jq -r '.raw.name')_solr
+docker volume rm ddev-$(ddev status -j | docker run -i --rm ddev/ddev-utilities jq -r '.raw.name')_typo3-solr
 
 # rebuild solr image (required step)
-ddev debug rebuild -s solr
+ddev debug rebuild -s typo3-solr
 
 ddev restart
 
