@@ -15,9 +15,12 @@ on:
         required: false
         default: false
 
-# Required permissions for keep-alive, used by ddev/github-action-add-on-test
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
-  actions: write
+  contents: read
 
 jobs:
   tests:
