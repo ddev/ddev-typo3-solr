@@ -40,6 +40,7 @@ Configuration example for TYPO3 in `.ddev/typo3-solr/config.yaml`:
 
 ```yaml
 config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
+typo3lib: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/typo3lib"
 configsets:
     - name: "ext_solr_12_0_0"
       path: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/configsets/ext_solr_12_0_0"
