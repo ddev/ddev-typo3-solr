@@ -42,8 +42,8 @@ Configuration example for TYPO3 in `.ddev/typo3-solr/config.yaml`:
 config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
 typo3lib: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/typo3lib"
 configsets:
-    - name: "ext_solr_12_0_0"
-      path: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/configsets/ext_solr_12_0_0"
+    - name: "ext_solr_13_0_0"
+      path: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/configsets/ext_solr_13_0_0"
       cores:
           - name: "core_en"
             schema: "english/schema.xml"
@@ -99,7 +99,7 @@ This addon defaults to installing a preferred version of the [docker Solr image]
 
 ```bash
 # Change image version as appropriate.
-ddev dotenv set .ddev/.env.solr --solr-base-image="solr:9.8"
+ddev dotenv set .ddev/.env.solr --solr-base-image="solr:9.9"
 
 ddev add-on get ddev/ddev-typo3-solr
 
@@ -122,7 +122,7 @@ All customization options (use with caution):
 
 | Variable | Flag | Default |
 | -------- | ---- | ------- |
-| `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.8` |
+| `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.9` |
 
 ## Credits
 
