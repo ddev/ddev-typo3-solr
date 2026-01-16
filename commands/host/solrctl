@@ -116,7 +116,7 @@ apply)
         exit 1
     fi
 
-    IFS=$'\n' configsets=($(echo "$YAML" | ddev exec "yq -o=j -I=0 '.configsets.[]'"))
+    mapfile -t configsets < <(echo "$YAML" | ddev exec "yq -o=j -I=0 '.configsets.[]'")
     for configset in "${configsets[@]}"; do
         configset_name=$(echo "$configset" | ddev exec "yq '.name // \"\"' -")
         configset_path="$DDEV_APPROOT/$(echo "$configset" | ddev exec "yq '.path // \"\"' -")"
@@ -131,15 +131,15 @@ apply)
         docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr "/var/solr/data/configsets/$configset_name"
 
         # Create solr cores if needed
-        IFS=$'\n' cores_array=($(echo "$configset" | ddev exec "yq -o=j -I=0 '.cores.[]'"))
+        mapfile -t cores_array < <(echo "$configset" | ddev exec "yq -o=j -I=0 '.cores.[]'")
         for core in "${cores_array[@]}"; do
             name=$(echo "$core" | ddev exec "yq '.name // \"\"' -")
             schema=$(echo "$core" | ddev exec "yq '.schema // \"\"' -")
 
             if [[ "${existing_cores[*]}" =~ (^|[[:space:]])"$name"($|[[:space:]]) ]]; then
-              echo "ℹ️ Core with name '$name' already exists."
+                echo "ℹ️ Core with name '$name' already exists."
             else
-              create_core "$name" "$configset_name" "$schema"
+                create_core "$name" "$configset_name" "$schema"
             fi
         done
     done
@@ -153,7 +153,7 @@ wipe)
     if [ "$response_code" -gt 0 ]; then
         echo "❌ Failed to call solr API on $api_url"
     else
-        IFS=$'\n' cores_array=($(echo "$response" | ddev exec "yq -o=j -I=0 '.status.[] // 0'"))
+        mapfile -t cores_array < <(echo "$response" | ddev exec "yq -o=j -I=0 '.status.[] // 0'")
         if [ "$(echo -n "${cores_array[@]}")" != "0" ]; then
             for core in "${cores_array[@]}"; do
                 name=$(echo "$core" | ddev exec "yq '.name // \"\"' -")
@@ -174,11 +174,11 @@ wipe)
 list)
     api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS"
     response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
-    cores=($(echo "$response" | ddev exec "yq '.status | keys[]'"))
+    mapfile -t cores < <(echo "$response" | ddev exec "yq '.status | keys[]'")
 
     echo "Found ${#cores[@]} cores"
     for core in "${cores[@]}"; do
-        echo " *" $core
+        echo " *" "$core"
     done
     ;;
 
