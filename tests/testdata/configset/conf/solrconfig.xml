@@ -1,4 +1,4 @@
-<config name="tx_solr-13-0-0--20240513">
+<config name="tx_solr-13-1-0--20260128">
 
 	<luceneMatchVersion>9.3.0</luceneMatchVersion>
 
