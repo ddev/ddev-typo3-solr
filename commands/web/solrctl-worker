@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Worker for solrctl - runs inside web container
+## Usage: solrctl-worker [copy-config|create-cores|wipe|list] [config-path]
+## Example: "ddev solrctl-worker copy-config .ddev/typo3-solr/config.yaml"
+## ExecRaw: true
+
+set -euo pipefail
+
+SOLR_HOST="typo3-solr"
+SOLR_PORT="${SOLR_PORT:-8983}"
+SOLR_API="http://${SOLR_HOST}:${SOLR_PORT}/solr"
+SOLR_DATA="/mnt/typo3-solr/data"
+
+resolve_path() {
+    local path="$1"
+    if [[ "$path" = /* ]]; then
+        echo "$path"
+    else
+        echo "/var/www/html/$path"
+    fi
+}
+
+cmd_copy_config() {
+    local yaml_file="$1"
+    yaml_file=$(resolve_path "$yaml_file")
+
+    if [ ! -f "$yaml_file" ]; then
+        echo "Add-on config file $yaml_file does not exist."
+        exit 1
+    fi
+
+    local config_rel
+    config_rel=$(yq eval '.config' "$yaml_file")
+    local config="/var/www/html/$config_rel"
+
+    if [ ! -f "$config" ]; then
+        echo "Solr config file $config does not exist."
+        exit 1
+    fi
+
+    local typo3lib_rel
+    typo3lib_rel=$(yq eval '.typo3lib' "$yaml_file")
+    local typo3lib="/var/www/html/$typo3lib_rel"
+
+    if [ ! -d "$typo3lib" ]; then
+        echo "The typo3lib folder $typo3lib does not exist."
+        exit 1
+    fi
+
+    # Create directory structure
+    mkdir -p "${SOLR_DATA}/configsets/"
+
+    # Copy solr.xml
+    echo "🐳 Copy $(basename "$config") to container"
+    cp "$config" "${SOLR_DATA}/"
+
+    # Copy typo3lib
+    echo "🐳 Copy typo3lib to container"
+    cp -r "$typo3lib" "${SOLR_DATA}/"
+
+    # Copy each configset
+    local configset_count
+    configset_count=$(yq eval '.configsets | length' "$yaml_file")
+
+    for ((i = 0; i < configset_count; i++)); do
+        local configset_name
+        configset_name=$(yq eval ".configsets[$i].name // \"\"" "$yaml_file")
+        local configset_path_rel
+        configset_path_rel=$(yq eval ".configsets[$i].path // \"\"" "$yaml_file")
+        local configset_path="/var/www/html/$configset_path_rel"
+
+        if [ ! -d "$configset_path" ]; then
+            echo "Solr configset '$configset_name' does not exist."
+            exit 1
+        fi
+
+        echo "🐳 Copy configset '$configset_name' to container"
+        mkdir -p "${SOLR_DATA}/configsets/${configset_name}"
+        cp -r "${configset_path}/." "${SOLR_DATA}/configsets/${configset_name}/"
+    done
+}
+
+cmd_create_cores() {
+    local yaml_file="$1"
+    yaml_file=$(resolve_path "$yaml_file")
+
+    if [ ! -f "$yaml_file" ]; then
+        echo "Add-on config file $yaml_file does not exist."
+        exit 1
+    fi
+
+    # Get existing cores
+    local response
+    response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS")
+    local response_code=$?
+
+    if [ "$response_code" -gt 0 ]; then
+        echo "❌ Failed to call solr API"
+        exit 1
+    fi
+
+    local existing_cores
+    existing_cores=$(echo "$response" | yq -r '.status | keys | .[]')
+
+    local configset_count
+    configset_count=$(yq eval '.configsets | length' "$yaml_file")
+
+    for ((i = 0; i < configset_count; i++)); do
+        local configset_name
+        configset_name=$(yq eval ".configsets[$i].name // \"\"" "$yaml_file")
+
+        local core_count
+        core_count=$(yq eval ".configsets[$i].cores | length" "$yaml_file")
+
+        for ((j = 0; j < core_count; j++)); do
+            local name
+            name=$(yq eval ".configsets[$i].cores[$j].name // \"\"" "$yaml_file")
+            local schema
+            schema=$(yq eval ".configsets[$i].cores[$j].schema // \"\"" "$yaml_file")
+
+            # Check if core already exists
+            if echo "$existing_cores" | grep -qx "$name"; then
+                echo "ℹ️ Core with name '$name' already exists."
+                continue
+            fi
+
+            # Build API URL
+            local schema_param=""
+            if [ -n "$schema" ]; then
+                schema_param="&schema=$schema"
+            fi
+
+            local api_url="${SOLR_API}/admin/cores?action=CREATE&name=$name&configSet=$configset_name&dataDir=./${schema_param}"
+            local core_response
+            core_response=$(curl -s "$api_url")
+            local core_response_code=$?
+
+            if [ "$core_response_code" -gt 0 ]; then
+                echo "❌ Failed to call solr API on $api_url"
+                exit 1
+            fi
+
+            local status
+            status=$(echo "$core_response" | yq '.responseHeader.status')
+
+            if [ "$status" = "0" ]; then
+                echo "✅ Core '$name' created"
+            elif [ "$status" = "500" ]; then
+                local error_core
+                error_core=$(echo "$core_response" | yq '.error.msg')
+                echo "ℹ️ $error_core"
+            else
+                local error_message
+                error_message=$(echo "$core_response" | yq '.error.msg')
+                echo "❌ $error_message"
+                exit 1
+            fi
+        done
+    done
+}
+
+cmd_wipe() {
+    local response
+    response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS&wt=json")
+    local response_code=$?
+
+    if [ "$response_code" -gt 0 ]; then
+        echo "❌ Failed to call solr API"
+    else
+        local core_names
+        core_names=$(echo "$response" | yq -r '.status | keys | .[]')
+
+        if [ -n "$core_names" ]; then
+            while IFS= read -r name; do
+                local api_delete_url="${SOLR_API}/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
+                local del_response
+                del_response=$(curl -s -X POST -H 'Content-type: application/json' "$api_delete_url")
+                local status
+                status=$(echo "$del_response" | yq '.responseHeader.status')
+
+                if [ "$status" -eq 0 ]; then
+                    rm -rf "${SOLR_DATA:?}/${name}"
+                    echo "🗑️Deleted core '$name' "
+                else
+                    local error_message
+                    error_message=$(echo "$del_response" | yq '.error.msg')
+                    echo "ℹ️ Core '$name' - $error_message"
+                fi
+            done <<< "$core_names"
+        fi
+    fi
+
+    # Delete all configsets and solr.xml
+    echo "🗑️Delete all configsets and solr.xml configuration"
+    rm -rf "${SOLR_DATA}/configsets" "${SOLR_DATA}/solr.xml"
+}
+
+cmd_list() {
+    local response
+    response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS")
+
+    local core_names
+    core_names=$(echo "$response" | yq '.status | keys[]')
+
+    local count=0
+    if [ -n "$core_names" ]; then
+        count=$(echo "$core_names" | wc -l | tr -d ' ')
+    fi
+
+    echo "Found $count cores"
+    if [ -n "$core_names" ]; then
+        while IFS= read -r core; do
+            echo " *" "$core"
+        done <<< "$core_names"
+    fi
+}
+
+CMD="${1:-}"
+shift || true
+
+case "$CMD" in
+    copy-config)
+        if [ -z "${1:-}" ]; then
+            echo "Usage: solrctl-worker copy-config <yaml-file>"
+            exit 1
+        fi
+        cmd_copy_config "$1"
+        ;;
+    create-cores)
+        if [ -z "${1:-}" ]; then
+            echo "Usage: solrctl-worker create-cores <yaml-file>"
+            exit 1
+        fi
+        cmd_create_cores "$1"
+        ;;
+    wipe)
+        cmd_wipe
+        ;;
+    list)
+        cmd_list
+        ;;
+    *)
+        echo "Usage: solrctl-worker [copy-config|create-cores|wipe|list] [config-path]"
+        exit 1
+        ;;
+esac

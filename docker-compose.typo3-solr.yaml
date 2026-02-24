@@ -20,5 +20,9 @@ services:
       - ".:/mnt/ddev_config"
       - "ddev-global-cache:/mnt/ddev-global-cache"
 
+  web:
+    volumes:
+      - "typo3-solr:/mnt/typo3-solr"
+
 volumes:
   typo3-solr:

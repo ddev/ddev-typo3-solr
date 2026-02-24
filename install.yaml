@@ -4,6 +4,7 @@ project_files:
   - docker-compose.typo3-solr.yaml
   - typo3-solr/config.yaml
   - commands/host/solrctl
+  - commands/web/solrctl-worker
   - commands/typo3-solr/solr
 
 ddev_version_constraint: '>= v1.24.3'

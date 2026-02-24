@@ -11,56 +11,6 @@ wait_for_solr() {
     ddev exec -s typo3-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
 }
 
-create_core() {
-    name="${1}"
-    configset="${2}"
-    schema="${3}"
-    if [ "$configset" = "" ]; then
-        echo "❌ Please define a configset!"
-        exit 1
-    fi
-    # Schema
-    schema_param=""
-    if [ ! "$schema" = "" ]; then
-        schema_param="&schema=$schema"
-    fi
-    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=CREATE&name=$name&configSet=$configset&dataDir=./$schema_param"
-    response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
-    response_code=$?
-    status=$(echo "$response" | ddev exec "yq '.responseHeader.status'")
-
-    if [ "$response_code" -gt 0 ]; then
-        echo "❌ Failed to call solr API on $api_url"
-        exit 1
-    fi
-
-    if [ "$status" = "0" ]; then
-        echo "✅ Core '$name' created"
-    elif [ "$status" = "500" ]; then
-        error_core=$(echo "$response" | ddev exec "yq '.error.msg'")
-        echo "ℹ️ $error_core"
-    else
-        error_message=$(echo "$response" | ddev exec "yq '.error.msg'")
-        echo "❌ $error_message"
-        exit 1
-    fi
-}
-
-delete_core() {
-    api_delete_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
-    response=$(ddev exec -s typo3-solr "curl -s -X POST -H 'Content-type: application/json' '$api_delete_url'")
-    response_code=$?
-    status=$(echo "$response" | ddev exec "yq '.responseHeader.status'")
-
-    if [ "$status" -eq 0 ]; then
-        docker exec -u 0 -i ddev-"$DDEV_SITENAME"-typo3-solr rm -Rf /var/solr/data/"$name"
-        echo "🗑️Deleted core '$name' "
-    else
-        error_message=$(echo "$response" | ddev exec "yq '.error.msg'")
-        echo "ℹ️ Core '$name' - $error_message"
-    fi
-}
-
 # Start the project if not already running, so we can interact with solr
 ddev_status=$(ddev describe -j | ddev exec "yq -p=json eval '.raw.status'")
 if [ "$ddev_status" = "stopped" ]; then
@@ -80,106 +30,30 @@ apply)
 
     echo "Apply config $YAML_FILE"
 
-    YAML=$(cat "$YAML_FILE")
-    config="$DDEV_APPROOT/$(echo "$YAML" | ddev exec "yq eval '.config'")"
+    # Make Solr volume writable for web container, then copy files
+    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chmod -R 777 /var/solr/
+    ddev solrctl-worker copy-config "$YAML_FILE"
 
-    if [ ! -f "$config" ]; then
-        echo "Solr config file $config does not exist."
-        exit 1
-    fi
-
-    typo3lib="$DDEV_APPROOT/$(echo "$YAML" | ddev exec "yq eval '.typo3lib'")"
-    if [ ! -d "$typo3lib" ]; then
-        echo "The typo3lib folder $typo3lib does not exist."
-        exit 1
-    fi
-
-    # Copy files to the typo3-solr volume
-    docker exec -i ddev-"$DDEV_SITENAME"-typo3-solr mkdir -p /var/solr/data/configsets/
-    echo "🐳 Copy $(basename "$config") to container"
-    docker cp "$config" ddev-"$DDEV_SITENAME"-typo3-solr:/var/solr/data/ 1>/dev/null
-
-    echo "🐳 Copy typo3lib to container"
-    docker cp "$typo3lib" ddev-"$DDEV_SITENAME"-typo3-solr:/var/solr/data/ 1>/dev/null
-
-    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr /var/solr/data/
+    # Restore file ownership for Solr
+    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr /var/solr/
     docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
     wait_for_solr
 
-    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS"
-    response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
-    response_code=$?
-    existing_cores=$(echo "$response" | ddev exec "yq -r '.status | keys | .[]'")
-
-    if [ "$response_code" -gt 0 ]; then
-        echo "❌ Failed to call solr API on $api_url"
-        exit 1
-    fi
-
-    mapfile -t configsets < <(echo "$YAML" | ddev exec "yq -o=j -I=0 '.configsets.[]'")
-    for configset in "${configsets[@]}"; do
-        configset_name=$(echo "$configset" | ddev exec "yq '.name // \"\"' -")
-        configset_path="$DDEV_APPROOT/$(echo "$configset" | ddev exec "yq '.path // \"\"' -")"
-
-        if [ ! -d "$configset_path" ]; then
-            echo -e "Solr configset '$configset_name' does not exist."
-            exit 1
-        fi
-
-        echo "🐳 Copy configset '$configset_name' to container"
-        docker cp "$configset_path/." "ddev-$DDEV_SITENAME-typo3-solr:/var/solr/data/configsets/$configset_name" 1>/dev/null
-        docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr "/var/solr/data/configsets/$configset_name"
-
-        # Create solr cores if needed
-        mapfile -t cores_array < <(echo "$configset" | ddev exec "yq -o=j -I=0 '.cores.[]'")
-        for core in "${cores_array[@]}"; do
-            name=$(echo "$core" | ddev exec "yq '.name // \"\"' -")
-            schema=$(echo "$core" | ddev exec "yq '.schema // \"\"' -")
-
-            if [[ "${existing_cores[*]}" =~ (^|[[:space:]])"$name"($|[[:space:]]) ]]; then
-                echo "ℹ️ Core with name '$name' already exists."
-            else
-                create_core "$name" "$configset_name" "$schema"
-            fi
-        done
-    done
+    # Create cores via Solr API
+    ddev solrctl-worker create-cores "$YAML_FILE"
     ;;
 
 wipe)
-    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS&wt=json"
-    response=$(ddev exec -s typo3-solr bin/solr api --solr-url "$api_url")
-    response_code=$?
+    # Make Solr volume writable, then unload cores and delete files via web container
+    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chmod -R 777 /var/solr/
+    ddev solrctl-worker wipe
 
-    if [ "$response_code" -gt 0 ]; then
-        echo "❌ Failed to call solr API on $api_url"
-    else
-        mapfile -t cores_array < <(echo "$response" | ddev exec "yq -o=j -I=0 '.status.[] // 0'")
-        if [ "$(echo -n "${cores_array[@]}")" != "0" ]; then
-            for core in "${cores_array[@]}"; do
-                name=$(echo "$core" | ddev exec "yq '.name // \"\"' -")
-
-                delete_core "$name"
-            done
-        fi
-    fi
-
-    # Delete all files in the
-    echo "🗑️Delete all configsets and solr.xml configuration"
-    docker exec -u 0 -i ddev-"$DDEV_SITENAME"-typo3-solr rm -Rf /var/solr/data/configsets /var/solr/data/solr.xml
     docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
-
     wait_for_solr
     ;;
 
 list)
-    api_url="http://localhost:${SOLR_PORT:-8983}/solr/admin/cores?action=STATUS"
-    response=$(ddev exec -s typo3-solr "curl -s '$api_url'")
-    mapfile -t cores < <(echo "$response" | ddev exec "yq '.status | keys[]'")
-
-    echo "Found ${#cores[@]} cores"
-    for core in "${cores[@]}"; do
-        echo " *" "$core"
-    done
+    ddev solrctl-worker list
     ;;
 
 --help | *)
