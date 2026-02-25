@@ -146,15 +146,15 @@ cmd_create_cores() {
 
             if [ "$status" = "0" ]; then
                 echo "✅ Core '$name' created"
-            elif [ "$status" = "500" ]; then
-                local error_core
-                error_core=$(echo "$core_response" | yq '.error.msg')
-                echo "ℹ️ $error_core"
             else
                 local error_message
                 error_message=$(echo "$core_response" | yq '.error.msg')
-                echo "❌ $error_message"
-                exit 1
+                if [[ "$error_message" == *"already defined"* || "$error_message" == *"already exists"* ]]; then
+                    echo "ℹ️ Core with name '$name' already exists."
+                else
+                    echo "❌ $error_message"
+                    exit 1
+                fi
             fi
         done
     done
