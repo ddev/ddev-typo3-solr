@@ -7,10 +7,6 @@
 CMD=$1
 YAML_FILE=".ddev/typo3-solr/config.yaml"
 
-wait_for_solr() {
-    ddev exec -s typo3-solr wait-for-solr.sh --wait-seconds 1 1>/dev/null
-}
-
 # Start the project if not already running, so we can interact with solr
 ddev_status=$(ddev describe -j | ddev exec "yq -p=json eval '.raw.status'")
 if [ "$ddev_status" = "stopped" ]; then
@@ -37,7 +33,6 @@ apply)
     # Restore file ownership for Solr
     ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
     ddev utility rebuild -s typo3-solr --cache 1>/dev/null
-    wait_for_solr
 
     # Create cores via Solr API
     ddev solrctl-worker create-cores "$YAML_FILE"
@@ -49,7 +44,6 @@ wipe)
     ddev solrctl-worker wipe
 
     ddev utility rebuild -s typo3-solr --cache 1>/dev/null
-    wait_for_solr
     ;;
 
 list)
