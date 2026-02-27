@@ -59,6 +59,12 @@ health_checks() {
   assert_output --partial "* core_de"
   assert_output --partial "* core_en"
 
+  echo "Apply configuration with existing cores, do not fail on existing" >&3
+  run ddev solrctl apply tests/testdata/config.yaml
+  assert_success
+  assert_output --partial "Core with name 'core_de' already exists"
+  assert_output --partial "Core with name 'core_en' already exists"
+
   echo "Delete/wipe configuration" >&3
   run ddev solrctl wipe
   assert_success
