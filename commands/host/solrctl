@@ -31,12 +31,12 @@ apply)
     echo "Apply config $YAML_FILE"
 
     # Make Solr volume writable for web container, then copy files
-    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chmod -R 777 /var/solr/
+    ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
     ddev solrctl-worker copy-config "$YAML_FILE"
 
     # Restore file ownership for Solr
-    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chown -R solr:solr /var/solr/
-    docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
+    ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
+    ddev utility rebuild -s typo3-solr --cache 1>/dev/null
     wait_for_solr
 
     # Create cores via Solr API
@@ -45,10 +45,10 @@ apply)
 
 wipe)
     # Make Solr volume writable, then unload cores and delete files via web container
-    docker exec -i -u root ddev-"$DDEV_SITENAME"-typo3-solr chmod -R 777 /var/solr/
+    ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
     ddev solrctl-worker wipe
 
-    docker restart ddev-"$DDEV_SITENAME"-typo3-solr 1>/dev/null
+    ddev utility rebuild -s typo3-solr --cache 1>/dev/null
     wait_for_solr
     ;;
 
