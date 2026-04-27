@@ -8,8 +8,7 @@
 set -euo pipefail
 
 SOLR_HOST="typo3-solr"
-SOLR_PORT="${SOLR_PORT:-8983}"
-SOLR_API="http://${SOLR_HOST}:${SOLR_PORT}/solr"
+SOLR_API="http://${SOLR_HOST}:8983/solr"
 SOLR_DATA="/mnt/typo3-solr/data"
 
 resolve_path() {
