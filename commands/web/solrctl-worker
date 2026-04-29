@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-#ddev-generated
+
+## #ddev-generated: If you want to edit and own this file, remove this line.
 ## Description: Worker for solrctl - runs inside web container
-## Usage: solrctl-worker [copy-config|create-cores|wipe|list] [config-path]
+## Usage: solrctl-worker [is-solrcloud|typo3lib-registered|register-typo3lib|upload-configsets|create-collections|copy-config|create-cores|wipe|wipe-cloud|list] [config-path]
 ## Example: "ddev solrctl-worker copy-config .ddev/typo3-solr/config.yaml"
 ## ExecRaw: true
 
@@ -13,141 +14,385 @@ SOLR_DATA="/mnt/typo3-solr/data"
 
 resolve_path() {
     local path="$1"
-    if [[ "$path" = /* ]]; then
-        echo "$path"
+    [[ "$path" = /* ]] && echo "$path" || echo "/var/www/html/$path"
+}
+
+solr_status() { echo "$1" | yq '.responseHeader.status // -1'; }
+solr_error()  { echo "$1" | yq '.error.msg // "unknown"'; }
+
+cmd_is_solrcloud() {
+    if curl -s "${SOLR_API}/admin/collections?action=LIST" 2>/dev/null | grep -q '"collections"'; then
+        echo "true"
     else
-        echo "/var/www/html/$path"
+        echo "false"
     fi
 }
 
-cmd_copy_config() {
-    local yaml_file="$1"
-    yaml_file=$(resolve_path "$yaml_file")
+cmd_typo3lib_registered() {
+    if [ -d "${SOLR_DATA}/typo3lib" ]; then
+        echo "✅ typo3lib registered"
+    else
+        echo "❌ typo3lib not registered"
+        return 1
+    fi
+}
 
-    if [ ! -f "$yaml_file" ]; then
-        echo "Add-on config file $yaml_file does not exist."
-        exit 1
+# Map language directory names to the lang codes used in ext-solr seed file names.
+# e.g. german → de matches _schema_analysis_stopwords_core_de.json
+declare -A LANG_CODE_MAP=(
+    [arabic]=ar [armenian]=hy [basque]=eu [brazilian_portuguese]=ptbr
+    [bulgarian]=bg [burmese]=my [catalan]=ca [chinese]=zh
+    [czech]=cs [danish]=da [dutch]=nl [english]=en
+    [finnish]=fi [french]=fr [galician]=gl [generic]=generic
+    [german]=de [greek]=el [hindi]=hi [hungarian]=hu
+    [indonesian]=id [irish]=ie [italian]=it [japanese]=ja
+    [khmer]=km [korean]=ko [lao]=lo [latvia]=lv
+    [norwegian]=no [persian]=fa [polish]=pl [portuguese]=pt
+    [romanian]=ro [russian]=ru [serbian]=rs [spanish]=es
+    [swedish]=sv [thai]=th [turkish]=tr [ukrainian]=uk
+)
+
+# Seed stopwords and synonyms for a collection from ext-solr's language seed files.
+# Reads the managed resource ID from the runtime schema (resolves ${solr.core.name}).
+# Skips seeding if the resource already has words (idempotent).
+seed_managed_resources_for_collection() {
+    local collection="$1"
+    local conf_dir="$2"   # path to configset conf/ directory
+    local lang_code="$3"  # e.g. de, en, ptbr
+
+    local managed_id
+    managed_id=$(curl -s "${SOLR_API}/${collection}/schema/fieldtypes/text" | \
+        yq '.fieldType.queryAnalyzer.filters[] | select(.class == "solr.ManagedSynonymGraphFilterFactory") | .managed' 2>/dev/null || true)
+
+    if [ -z "$managed_id" ] || [ "$managed_id" = "null" ]; then
+        echo "  ⚠️  Cannot determine managed resource ID for '${collection}', skipping seed"
+        return 0
     fi
 
-    local config_rel
-    config_rel=$(yq eval '.config' "$yaml_file")
-    local config="/var/www/html/$config_rel"
+    # Seed stopwords
+    local stopwords_file="${conf_dir}/_schema_analysis_stopwords_core_${lang_code}.json"
+    if [ -f "$stopwords_file" ]; then
+        local current_count
+        current_count=$(curl -s "${SOLR_API}/${collection}/schema/analysis/stopwords/${managed_id}" | \
+            yq '.wordSet.managedList | length // 0' 2>/dev/null || echo "0")
 
-    if [ ! -f "$config" ]; then
-        echo "Solr config file $config does not exist."
-        exit 1
+        if [ "${current_count:-0}" = "0" ]; then
+            local words_json word_count
+            words_json=$(yq -o=json '.managedList' "$stopwords_file" 2>/dev/null || echo "[]")
+            word_count=$(yq 'length // 0' <<< "$words_json" 2>/dev/null || echo "0")
+            if [ "${word_count:-0}" -gt 0 ]; then
+                local response
+                response=$(curl -s -X PUT "${SOLR_API}/${collection}/schema/analysis/stopwords/${managed_id}" \
+                    -H "Content-Type: application/json" -d "$words_json")
+                [ "$(solr_status "$response")" = "0" ] \
+                    && echo "  📚 Seeded ${word_count} stopwords (${lang_code})" \
+                    || echo "  ⚠️  Stopword seed failed: $(solr_error "$response")"
+            fi
+        else
+            echo "  ℹ️  Stopwords already populated (${current_count} words)"
+        fi
     fi
 
-    local typo3lib_rel
-    typo3lib_rel=$(yq eval '.typo3lib' "$yaml_file")
-    local typo3lib="/var/www/html/$typo3lib_rel"
+    # Seed synonyms
+    local synonyms_file="${conf_dir}/_schema_analysis_synonyms_core_${lang_code}.json"
+    if [ -f "$synonyms_file" ]; then
+        local current_count
+        current_count=$(curl -s "${SOLR_API}/${collection}/schema/analysis/synonyms/${managed_id}" | \
+            yq '.synonymMappings.managedMap | length // 0' 2>/dev/null || echo "0")
 
-    if [ ! -d "$typo3lib" ]; then
-        echo "The typo3lib folder $typo3lib does not exist."
-        exit 1
+        if [ "${current_count:-0}" = "0" ]; then
+            local map_json entry_count
+            map_json=$(yq -o=json '.managedMap' "$synonyms_file" 2>/dev/null || echo "{}")
+            entry_count=$(yq 'length // 0' <<< "$map_json" 2>/dev/null || echo "0")
+            if [ "${entry_count:-0}" -gt 0 ]; then
+                local response
+                response=$(curl -s -X PUT "${SOLR_API}/${collection}/schema/analysis/synonyms/${managed_id}" \
+                    -H "Content-Type: application/json" -d "$map_json")
+                [ "$(solr_status "$response")" = "0" ] \
+                    && echo "  📚 Seeded ${entry_count} synonym entries (${lang_code})" \
+                    || echo "  ⚠️  Synonym seed failed: $(solr_error "$response")"
+            fi
+        else
+            echo "  ℹ️  Synonyms already populated (${current_count} entries)"
+        fi
     fi
+}
 
-    # Create directory structure
-    mkdir -p "${SOLR_DATA}/configsets/"
+# Upload language-specific configsets to ZooKeeper (SolrCloud mode).
+# Each unique schema language dir gets its own configset: ext_solr_13_1_0_<lang>.
+cmd_upload_configsets() {
+    local yaml_file
+    yaml_file=$(resolve_path "$1")
 
-    # Copy solr.xml
-    echo "🐳 Copy $(basename "$config") to container"
-    cp "$config" "${SOLR_DATA}/"
+    local configset_count
+    configset_count=$(yq eval '.configsets | length' "$yaml_file")
+    declare -A processed_langs
 
-    # Copy typo3lib
-    echo "🐳 Copy typo3lib to container"
-    cp -r "$typo3lib" "${SOLR_DATA}/"
+    for ((i = 0; i < configset_count; i++)); do
+        local base_path configset_base_name core_count
+        base_path="/var/www/html/$(yq eval ".configsets[$i].path" "$yaml_file")"
+        configset_base_name=$(yq eval ".configsets[$i].name" "$yaml_file")
+        core_count=$(yq eval ".configsets[$i].cores | length" "$yaml_file")
 
-    # Copy each configset
+        for ((j = 0; j < core_count; j++)); do
+            local schema lang_dir configset_name
+            schema=$(yq eval ".configsets[$i].cores[$j].schema" "$yaml_file")
+            lang_dir=$(dirname "$schema")
+
+            [ -n "${processed_langs[$lang_dir]+_}" ] && continue
+            processed_langs[$lang_dir]=1
+
+            configset_name="${configset_base_name}_${lang_dir}"
+
+            if curl -s "${SOLR_API}/admin/configs?action=LIST" | grep -q "\"${configset_name}\""; then
+                echo "ℹ️  Configset '${configset_name}' already exists"
+                continue
+            fi
+
+            local tmp_dir zip_file
+            tmp_dir=$(mktemp -d)
+            zip_file="${tmp_dir}.zip"
+
+            cp -r "${base_path}/conf/." "${tmp_dir}/"
+            cp "${base_path}/conf/${schema}" "${tmp_dir}/schema.xml"
+            # The language schema uses ../general_schema_*.xml (relative to its subdir).
+            # After flattening into one dir both files are siblings, so strip the ../
+            sed -i 's|href="\.\./|href="|g' "${tmp_dir}/schema.xml"
+            (cd "${tmp_dir}" && zip -r "${zip_file}" . -x "*.DS_Store" > /dev/null)
+
+            local response
+            response=$(curl -s -X POST \
+                "${SOLR_API}/admin/configs?action=UPLOAD&name=${configset_name}" \
+                -H "Content-Type: application/octet-stream" \
+                --data-binary @"${zip_file}")
+            rm -rf "${tmp_dir}" "${zip_file}"
+
+            if [ "$(solr_status "$response")" = "0" ]; then
+                echo "✅ Configset '${configset_name}' uploaded"
+            else
+                echo "❌ Failed to upload '${configset_name}': $(solr_error "$response")"
+                exit 1
+            fi
+        done
+    done
+}
+
+# Create SolrCloud collections from config.yaml and seed managed stopwords/synonyms.
+cmd_create_collections() {
+    local yaml_file
+    yaml_file=$(resolve_path "$1")
+
     local configset_count
     configset_count=$(yq eval '.configsets | length' "$yaml_file")
 
+    local existing_list
+    existing_list=$(curl -s "${SOLR_API}/admin/collections?action=LIST")
+
     for ((i = 0; i < configset_count; i++)); do
-        local configset_name
+        local base_path configset_base_name core_count
+        base_path="/var/www/html/$(yq eval ".configsets[$i].path" "$yaml_file")"
+        configset_base_name=$(yq eval ".configsets[$i].name" "$yaml_file")
+        core_count=$(yq eval ".configsets[$i].cores | length" "$yaml_file")
+
+        for ((j = 0; j < core_count; j++)); do
+            local name schema lang_dir lang_code configset_name
+            name=$(yq eval ".configsets[$i].cores[$j].name" "$yaml_file")
+            schema=$(yq eval ".configsets[$i].cores[$j].schema" "$yaml_file")
+            lang_dir=$(dirname "$schema")
+            lang_code="${LANG_CODE_MAP[$lang_dir]:-$lang_dir}"
+            configset_name="${configset_base_name}_${lang_dir}"
+
+            if echo "$existing_list" | grep -q "\"${name}\""; then
+                local cur_config
+                cur_config=$(curl -s "${SOLR_API}/admin/collections?action=CLUSTERSTATUS" | \
+                    yq ".cluster.collections.${name}.configName // \"\"" 2>/dev/null || true)
+                if [ -n "$cur_config" ] && [ "$cur_config" != "$configset_name" ]; then
+                    echo "⚠️  Collection '${name}' exists with wrong configset '${cur_config}' (expected '${configset_name}')"
+                    echo "   Fix: ddev solrctl wipe && ddev solrctl apply"
+                    continue
+                fi
+                echo "ℹ️  Collection '${name}' already exists"
+            else
+                local response
+                response=$(curl -s \
+                    "${SOLR_API}/admin/collections?action=CREATE&name=${name}&numShards=1&replicationFactor=1&collection.configName=${configset_name}")
+
+                if [ "$(solr_status "$response")" = "0" ]; then
+                    echo "✅ Collection '${name}' created"
+                else
+                    echo "❌ Failed to create '${name}': $(solr_error "$response")"
+                    exit 1
+                fi
+            fi
+
+            seed_managed_resources_for_collection "${name}" "${base_path}/conf" "${lang_code}"
+        done
+    done
+}
+
+# Delete collections and configsets listed in config.yaml (targeted SolrCloud deletion).
+cmd_delete_collections() {
+    local yaml_file
+    yaml_file=$(resolve_path "$1")
+
+    local configset_count
+    configset_count=$(yq eval '.configsets | length' "$yaml_file")
+    declare -A processed_langs
+
+    local existing_collections existing_configs
+    existing_collections=$(curl -s "${SOLR_API}/admin/collections?action=LIST")
+    existing_configs=$(curl -s "${SOLR_API}/admin/configs?action=LIST")
+
+    for ((i = 0; i < configset_count; i++)); do
+        local configset_base_name core_count
+        configset_base_name=$(yq eval ".configsets[$i].name" "$yaml_file")
+        core_count=$(yq eval ".configsets[$i].cores | length" "$yaml_file")
+
+        for ((j = 0; j < core_count; j++)); do
+            local name schema lang_dir configset_name
+            name=$(yq eval ".configsets[$i].cores[$j].name" "$yaml_file")
+            schema=$(yq eval ".configsets[$i].cores[$j].schema" "$yaml_file")
+            lang_dir=$(dirname "$schema")
+            configset_name="${configset_base_name}_${lang_dir}"
+
+            if echo "$existing_collections" | grep -q "\"${name}\""; then
+                local response
+                response=$(curl -s "${SOLR_API}/admin/collections?action=DELETE&name=${name}")
+                [ "$(solr_status "$response")" = "0" ] \
+                    && echo "🗑️  Deleted collection '${name}'" \
+                    || echo "❌ $(solr_error "$response")"
+            fi
+
+            if [ -z "${processed_langs[$lang_dir]+_}" ]; then
+                processed_langs[$lang_dir]=1
+                if echo "$existing_configs" | grep -q "\"${configset_name}\""; then
+                    local response
+                    response=$(curl -s "${SOLR_API}/admin/configs?action=DELETE&name=${configset_name}")
+                    [ "$(solr_status "$response")" = "0" ] \
+                        && echo "🗑️  Deleted configset '${configset_name}'" \
+                        || echo "❌ $(solr_error "$response")"
+                fi
+            fi
+        done
+    done
+}
+
+# Delete ALL collections and ALL non-protected configsets (SolrCloud full wipe).
+cmd_wipe_cloud() {
+    local collections
+    collections=$(curl -s "${SOLR_API}/admin/collections?action=LIST" | yq '.collections[]?' 2>/dev/null || true)
+
+    if [ -n "$collections" ]; then
+        while IFS= read -r name; do
+            local response
+            response=$(curl -s "${SOLR_API}/admin/collections?action=DELETE&name=${name}")
+            [ "$(solr_status "$response")" = "0" ] \
+                && echo "🗑️  Deleted collection '${name}'" \
+                || echo "❌ $(solr_error "$response")"
+        done <<< "$collections"
+    else
+        echo "ℹ️  No collections found"
+    fi
+
+    # Skip built-in configsets (prefixed with _)
+    local configsets
+    configsets=$(curl -s "${SOLR_API}/admin/configs?action=LIST" | yq '.configSets[]?' 2>/dev/null | grep -v '^_' || true)
+
+    if [ -n "$configsets" ]; then
+        while IFS= read -r name; do
+            local response
+            response=$(curl -s "${SOLR_API}/admin/configs?action=DELETE&name=${name}")
+            [ "$(solr_status "$response")" = "0" ] \
+                && echo "🗑️  Deleted configset '${name}'" \
+                || echo "❌ $(solr_error "$response")"
+        done <<< "$configsets"
+    else
+        echo "ℹ️  No configsets found"
+    fi
+}
+
+# Copy solr.xml and typo3lib to SOLR_DATA (shared volume) for SolrCloud sharedLib loading.
+cmd_register_typo3lib() {
+    local yaml_file
+    yaml_file=$(resolve_path "$1")
+
+    local config typo3lib
+    config="/var/www/html/$(yq eval '.config' "$yaml_file")"
+    typo3lib="/var/www/html/$(yq eval '.typo3lib' "$yaml_file")"
+
+    [ ! -f "$config" ]   && { echo "Solr config file $config does not exist."; exit 1; }
+    [ ! -d "$typo3lib" ] && { echo "The typo3lib folder $typo3lib does not exist."; exit 1; }
+
+    mkdir -p "${SOLR_DATA}"
+    echo "🐳 Copying $(basename "$config") to Solr data dir"
+    cp "$config" "${SOLR_DATA}/"
+    echo "🐳 Copying typo3lib to Solr data dir"
+    cp -r "$typo3lib" "${SOLR_DATA}/"
+}
+
+cmd_copy_config() {
+    local yaml_file
+    yaml_file=$(resolve_path "$1")
+
+    [ ! -f "$yaml_file" ] && { echo "Add-on config file $yaml_file does not exist."; exit 1; }
+
+    cmd_register_typo3lib "$yaml_file"
+
+    local configset_count
+    configset_count=$(yq eval '.configsets | length' "$yaml_file")
+    mkdir -p "${SOLR_DATA}/configsets/"
+
+    for ((i = 0; i < configset_count; i++)); do
+        local configset_name configset_path
         configset_name=$(yq eval ".configsets[$i].name // \"\"" "$yaml_file")
-        local configset_path_rel
-        configset_path_rel=$(yq eval ".configsets[$i].path // \"\"" "$yaml_file")
-        local configset_path="/var/www/html/$configset_path_rel"
+        configset_path="/var/www/html/$(yq eval ".configsets[$i].path // \"\"" "$yaml_file")"
 
-        if [ ! -d "$configset_path" ]; then
-            echo "Solr configset '$configset_name' does not exist."
-            exit 1
-        fi
+        [ ! -d "$configset_path" ] && { echo "Solr configset '$configset_name' does not exist."; exit 1; }
 
-        echo "🐳 Copy configset '$configset_name' to container"
+        echo "🐳 Copying configset '$configset_name' to Solr data dir"
         mkdir -p "${SOLR_DATA}/configsets/${configset_name}"
         cp -r "${configset_path}/." "${SOLR_DATA}/configsets/${configset_name}/"
     done
 }
 
 cmd_create_cores() {
-    local yaml_file="$1"
-    yaml_file=$(resolve_path "$yaml_file")
+    local yaml_file
+    yaml_file=$(resolve_path "$1")
 
-    if [ ! -f "$yaml_file" ]; then
-        echo "Add-on config file $yaml_file does not exist."
-        exit 1
-    fi
-
-    # Get existing cores
-    local response
-    response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS")
-    local response_code=$?
-
-    if [ "$response_code" -gt 0 ]; then
-        echo "❌ Failed to call solr API"
-        exit 1
-    fi
+    [ ! -f "$yaml_file" ] && { echo "Add-on config file $yaml_file does not exist."; exit 1; }
 
     local existing_cores
-    existing_cores=$(echo "$response" | yq -r '.status | keys | .[]')
+    existing_cores=$(curl -s "${SOLR_API}/admin/cores?action=STATUS" | yq -r '.status | keys | .[]')
 
     local configset_count
     configset_count=$(yq eval '.configsets | length' "$yaml_file")
 
     for ((i = 0; i < configset_count; i++)); do
-        local configset_name
+        local configset_name core_count
         configset_name=$(yq eval ".configsets[$i].name // \"\"" "$yaml_file")
-
-        local core_count
         core_count=$(yq eval ".configsets[$i].cores | length" "$yaml_file")
 
         for ((j = 0; j < core_count; j++)); do
-            local name
+            local name schema
             name=$(yq eval ".configsets[$i].cores[$j].name // \"\"" "$yaml_file")
-            local schema
             schema=$(yq eval ".configsets[$i].cores[$j].schema // \"\"" "$yaml_file")
 
-            # Check if core already exists
             if echo "$existing_cores" | grep -qx "$name"; then
                 echo "ℹ️ Core with name '$name' already exists."
                 continue
             fi
 
-            # Build API URL
             local schema_param=""
-            if [ -n "$schema" ]; then
-                schema_param="&schema=$schema"
-            fi
+            [ -n "$schema" ] && schema_param="&schema=$schema"
 
-            local api_url="${SOLR_API}/admin/cores?action=CREATE&name=$name&configSet=$configset_name&dataDir=./${schema_param}"
-            local core_response
-            core_response=$(curl -s "$api_url")
-            local core_response_code=$?
+            local response
+            response=$(curl -s "${SOLR_API}/admin/cores?action=CREATE&name=$name&configSet=$configset_name&dataDir=./${schema_param}")
 
-            if [ "$core_response_code" -gt 0 ]; then
-                echo "❌ Failed to call solr API on $api_url"
-                exit 1
-            fi
-
-            local status
-            status=$(echo "$core_response" | yq '.responseHeader.status')
-
-            if [ "$status" = "0" ]; then
+            if [ "$(solr_status "$response")" = "0" ]; then
                 echo "✅ Core '$name' created"
             else
                 local error_message
-                error_message=$(echo "$core_response" | yq '.error.msg')
+                error_message=$(solr_error "$response")
                 if [[ "$error_message" == *"already defined"* || "$error_message" == *"already exists"* ]]; then
                     echo "ℹ️ Core with name '$name' already exists."
                 else
@@ -160,87 +405,63 @@ cmd_create_cores() {
 }
 
 cmd_wipe() {
-    local response
-    response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS&wt=json")
-    local response_code=$?
+    local core_names
+    core_names=$(curl -s "${SOLR_API}/admin/cores?action=STATUS&wt=json" | yq -r '.status | keys | .[]')
 
-    if [ "$response_code" -gt 0 ]; then
-        echo "❌ Failed to call solr API"
-    else
-        local core_names
-        core_names=$(echo "$response" | yq -r '.status | keys | .[]')
-
-        if [ -n "$core_names" ]; then
-            while IFS= read -r name; do
-                local api_delete_url="${SOLR_API}/admin/cores?action=UNLOAD&core=$name&deleteIndex=true"
-                local del_response
-                del_response=$(curl -s -X POST -H 'Content-type: application/json' "$api_delete_url")
-                local status
-                status=$(echo "$del_response" | yq '.responseHeader.status')
-
-                if [ "$status" -eq 0 ]; then
-                    rm -rf "${SOLR_DATA:?}/${name}"
-                    echo "🗑️Deleted core '$name' "
-                else
-                    local error_message
-                    error_message=$(echo "$del_response" | yq '.error.msg')
-                    echo "ℹ️ Core '$name' - $error_message"
-                fi
-            done <<< "$core_names"
-        fi
+    if [ -n "$core_names" ]; then
+        while IFS= read -r name; do
+            local response
+            response=$(curl -s -X POST -H 'Content-type: application/json' \
+                "${SOLR_API}/admin/cores?action=UNLOAD&core=$name&deleteIndex=true")
+            if [ "$(solr_status "$response")" = "0" ]; then
+                rm -rf "${SOLR_DATA:?}/${name}"
+                echo "🗑️  Deleted core '$name'"
+            else
+                echo "ℹ️ Core '$name' - $(solr_error "$response")"
+            fi
+        done <<< "$core_names"
     fi
 
-    # Delete all configsets and solr.xml
-    echo "🗑️Delete all configsets and solr.xml configuration"
+    echo "🗑️  Delete all configsets and solr.xml configuration"
     rm -rf "${SOLR_DATA}/configsets" "${SOLR_DATA}/solr.xml"
 }
 
 cmd_list() {
-    local response
-    response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS")
-
-    local core_names
-    core_names=$(echo "$response" | yq '.status | keys[]')
+    local mode items response
+    if [ "$(cmd_is_solrcloud)" = "true" ]; then
+        mode="collections (SolrCloud mode)"
+        response=$(curl -s "${SOLR_API}/admin/collections?action=LIST")
+        items=$(echo "$response" | yq '.collections[]?' 2>/dev/null || true)
+    else
+        mode="cores (standalone mode)"
+        response=$(curl -s "${SOLR_API}/admin/cores?action=STATUS")
+        items=$(echo "$response" | yq '.status | keys[]')
+    fi
 
     local count=0
-    if [ -n "$core_names" ]; then
-        count=$(echo "$core_names" | wc -l | tr -d ' ')
-    fi
-
-    echo "Found $count cores"
-    if [ -n "$core_names" ]; then
-        while IFS= read -r core; do
-            echo " *" "$core"
-        done <<< "$core_names"
-    fi
+    [ -n "$items" ] && count=$(echo "$items" | wc -l | tr -d ' ')
+    echo "Found $count $mode"
+    [ -n "$items" ] && while IFS= read -r item; do echo " * $item"; done <<< "$items"
 }
 
 CMD="${1:-}"
 shift || true
 
+require_arg() { [ -n "${1:-}" ] || { echo "Usage: solrctl-worker $CMD <yaml-file>"; exit 1; }; }
+
 case "$CMD" in
-    copy-config)
-        if [ -z "${1:-}" ]; then
-            echo "Usage: solrctl-worker copy-config <yaml-file>"
-            exit 1
-        fi
-        cmd_copy_config "$1"
-        ;;
-    create-cores)
-        if [ -z "${1:-}" ]; then
-            echo "Usage: solrctl-worker create-cores <yaml-file>"
-            exit 1
-        fi
-        cmd_create_cores "$1"
-        ;;
-    wipe)
-        cmd_wipe
-        ;;
-    list)
-        cmd_list
-        ;;
+    is-solrcloud)        cmd_is_solrcloud ;;
+    typo3lib-registered) cmd_typo3lib_registered ;;
+    register-typo3lib)   require_arg "${1:-}"; cmd_register_typo3lib "$1" ;;
+    upload-configsets)   require_arg "${1:-}"; cmd_upload_configsets "$1" ;;
+    create-collections)  require_arg "${1:-}"; cmd_create_collections "$1" ;;
+    copy-config)         require_arg "${1:-}"; cmd_copy_config "$1" ;;
+    create-cores)        require_arg "${1:-}"; cmd_create_cores "$1" ;;
+    wipe)                cmd_wipe ;;
+    wipe-cloud)          cmd_wipe_cloud ;;
+    list)                cmd_list ;;
     *)
-        echo "Usage: solrctl-worker [copy-config|create-cores|wipe|list] [config-path]"
+        echo "Usage: solrctl-worker [is-solrcloud|typo3lib-registered|register-typo3lib|upload-configsets|create-collections|copy-config|create-cores|wipe|wipe-cloud|list] [config-path]"
         exit 1
         ;;
 esac

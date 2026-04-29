@@ -3,15 +3,15 @@
 [![last commit](https://img.shields.io/github/last-commit/ddev/ddev-typo3-solr)](https://github.com/ddev/ddev-typo3-solr/commits)
 [![release](https://img.shields.io/github/v/release/ddev/ddev-typo3-solr)](https://github.com/ddev/ddev-typo3-solr/releases/latest)
 
-# DDEV TYPO3 Solr (standalone)
+# DDEV TYPO3 Solr
 
 ## Overview
 
 [Apache Solr](https://solr.apache.org/) is the blazing-fast, open source, multi-modal search platform built on the full-text, vector, and geospatial search capabilities of Apache Lucene™.
 
-This add-on integrates Solr standalone (no cloud) into your [DDEV](https://ddev.com/) project and creates Solr cores according to the configuration defined in [`.ddev/typo3-solr/config.yaml`](typo3-solr/config.yaml).
+This add-on integrates Solr into your [DDEV](https://ddev.com/) project and creates Solr cores according to the configuration defined in [`.ddev/typo3-solr/config.yaml`](typo3-solr/config.yaml).
 
-This add-on is meant to be a simple integration for DDEV, as it does not work with Solr Cloud and only for Solr standalone. Most web projects use Solr in standalone-mode so this add-on simulates this behaviour for local environments.
+This add-on is tailored to work with the TYPO3 extension `solr`. It now supports both server modes: standalone, solrcloud.
 
 ## Installation
 
@@ -42,8 +42,8 @@ Configuration example for TYPO3 in `.ddev/typo3-solr/config.yaml`:
 config: 'vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/solr.xml'
 typo3lib: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/typo3lib"
 configsets:
-    - name: "ext_solr_12_0_0"
-      path: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/configsets/ext_solr_12_0_0"
+    - name: "ext_solr_13_1_0"
+      path: "vendor/apache-solr-for-typo3/solr/Resources/Private/Solr/configsets/ext_solr_13_1_0"
       cores:
           - name: "core_en"
             schema: "english/schema.xml"
@@ -101,6 +101,9 @@ This addon defaults to installing a preferred version of the [docker Solr image]
 # Change image version as appropriate.
 ddev dotenv set .ddev/.env.solr --solr-base-image="solr:9.8"
 
+# Change solr mode
+ddev dotenv set .ddev/.env.solr --solr-mode="solrcloud"
+
 ddev add-on get ddev/ddev-typo3-solr
 
 # remove old solr volume (if this is downgrade)
@@ -123,6 +126,7 @@ All customization options (use with caution):
 | Variable | Flag | Default |
 | -------- | ---- | ------- |
 | `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.8` |
+| `SOLR_MODE` | `--solr-mode` | `standalone` |
 
 ## Credits
 

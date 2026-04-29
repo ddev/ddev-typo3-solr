@@ -14,7 +14,7 @@ services:
       # For setup steps see https://docs.typo3.org/p/apache-solr-for-typo3/solr/main/en-us/Solr/ConfigurationStructures.html#setup-steps
       - SOLR_ENABLE_REMOTE_STREAMING=true
       - SOLR_ENABLE_STREAM_BODY=true
-      - SOLR_MODE=standalone
+      - SOLR_MODE=${SOLR_MODE-standalone}
     volumes:
       - "typo3-solr:/var/solr/"
       - ".:/mnt/ddev_config"
