@@ -31,7 +31,7 @@ apply)
             ddev solrctl-worker register-typo3lib "$YAML_FILE"
             ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
             echo "⬆️  Uploading solr.xml to ZooKeeper..."
-            ddev exec -s typo3-solr -u solr solr zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
+            ddev solr-zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
             echo "🔄 Restarting Solr to load typo3lib..."
             SITE_NAME=$(ddev describe -j | ddev exec "yq -p=json eval '.raw.name'")
             docker restart "ddev-${SITE_NAME}-typo3-solr"

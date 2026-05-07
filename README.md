@@ -26,9 +26,10 @@ After installation, make sure to commit the `.ddev` directory to version control
 
 | Command | Description |
 | ------- | ----------- |
-| `ddev solrctl --help` | Create and destroy solr cores and configsets |
+| `ddev solrctl --help` | Create and destroy solr cores/collections and configsets |
+| `ddev solr-admin` | Open Solr Admin in your browser |
 | `ddev solr` | Run Solr CLI inside the Solr container |
-| `ddev launch :8984` | Open Solr Admin in your browser (`https://<project>.ddev.site:8984`) |
+| `ddev solr-zk` | Run ZooKeeper CLI commands inside the Solr container (SolrCloud only) |
 | `ddev describe` | View service status and used ports for Solr |
 | `ddev logs -s typo3-solr` | Check Solr logs |
 
@@ -93,40 +94,56 @@ ddev solr
 
 ## Advanced Customization
 
+### Switching between standalone and SolrCloud mode
+
+Solr initializes its data directory at first boot in a mode-specific layout. Switching modes on an existing volume will fail — the volume must be removed first.
+
+```bash
+# Set the desired mode
+ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
+
+ddev stop
+
+# Remove the Solr volume (required when switching modes)
+docker volume rm ddev-$(ddev status -j | docker run -i --rm ddev/ddev-utilities jq -r '.raw.name')_typo3-solr
+
+ddev restart
+ddev solrctl apply
+```
+
+Make sure to commit the `.ddev/.env.typo3-solr` file to version control.
+
 ### Using alternate versions of Solr
 
 This addon defaults to installing a preferred version of the [docker Solr image](https://hub.docker.com/_/solr), but can be configured to use a different version via environment variable (`SOLR_BASE_IMAGE`).
 
 ```bash
 # Change image version as appropriate.
-ddev dotenv set .ddev/.env.solr --solr-base-image="solr:9.8"
-
-# Change solr mode
-ddev dotenv set .ddev/.env.solr --solr-mode="solrcloud"
+ddev dotenv set .ddev/.env.typo3-solr --solr-base-image="solr:9.8"
 
 ddev add-on get ddev/ddev-typo3-solr
 
-# remove old solr volume (if this is downgrade)
+# Remove old solr volume (required for downgrades)
 ddev stop
 docker volume rm ddev-$(ddev status -j | docker run -i --rm ddev/ddev-utilities jq -r '.raw.name')_typo3-solr
 
-# rebuild solr image (required step)
+# Rebuild solr image (required step)
 ddev debug rebuild -s typo3-solr
 
 ddev restart
 
-# confirm the new Solr version
+# Confirm the new Solr version
 ddev solr version
 ```
 
-Make sure to commit the `.ddev/.env.solr` file to version control.
+Make sure to commit the `.ddev/.env.typo3-solr` file to version control.
 
 All customization options (use with caution):
 
 | Variable | Flag | Default |
 | -------- | ---- | ------- |
 | `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.8` |
-| `SOLR_MODE` | `--solr-mode` | `standalone` |
+| `SOLR_MODE` | `--solr-mode` | `standalone` (can be `standalone` or `solrcloud`) |
 
 ## Credits
 

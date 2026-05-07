@@ -210,7 +210,7 @@ teardown() {
 @test "install from directory (SolrCloud)" {
   set -eu -o pipefail
   echo "# ddev add-on get ${DIR} with SolrCloud mode, project ${PROJNAME} in $(pwd)" >&3
-  run ddev dotenv set .ddev/.env.solr --solr-mode="solrcloud"
+  run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
   assert_success
   run ddev add-on get "${DIR}"
   assert_success
@@ -223,7 +223,7 @@ teardown() {
 @test "install from release (SolrCloud)" {
   set -eu -o pipefail
   echo "# ddev add-on get ${GITHUB_REPO} with SolrCloud mode, project ${PROJNAME} in $(pwd)" >&3
-  run ddev dotenv set .ddev/.env.solr --solr-mode="solrcloud"
+  run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
   assert_success
   run ddev add-on get "${GITHUB_REPO}"
   assert_success
