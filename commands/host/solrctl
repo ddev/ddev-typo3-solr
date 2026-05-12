@@ -1,49 +1,76 @@
 #!/usr/bin/env bash
-#ddev-generated
-## Description: Create and destroy solr cores and configsets
-## Usage: solrctl
-## Example: "ddev solrctl"
 
-CMD=$1
-YAML_FILE=".ddev/typo3-solr/config.yaml"
+## #ddev-generated: If you want to edit and own this file, remove this line.
+## Description: Create and destroy solr cores/collections and configsets
+## Usage: solrctl [apply|wipe|list|--help]
+## Example: "ddev solrctl apply"
 
-# Start the project if not already running, so we can interact with solr
-ddev_status=$(ddev describe -j | ddev exec "yq -p=json eval '.raw.status'")
-if [ "$ddev_status" = "stopped" ]; then
+CMD="${1:-}"
+DEFAULT_YAML=".ddev/typo3-solr/config.yaml"
+
+if [ "$(ddev describe -j | ddev exec "yq -p=json eval '.raw.status'")" = "stopped" ]; then
     ddev start
 fi
 
-case $CMD in
+case "$CMD" in
 apply)
-    if [ -n "$2" ]; then
-        YAML_FILE="$2"
-    fi
+    YAML_FILE="${2:-$DEFAULT_YAML}"
 
-    if [ ! -f "$YAML_FILE" ]; then
-        echo "Add-on config file $YAML_FILE does not exist."
-        exit 1
-    fi
+    [ ! -f "$YAML_FILE" ] && { echo "Add-on config file $YAML_FILE does not exist."; exit 1; }
 
     echo "Apply config $YAML_FILE"
 
-    # Make Solr volume writable for web container, then copy files
-    ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
-    ddev solrctl-worker copy-config "$YAML_FILE"
+    IS_SOLR_CLOUD=$(ddev solrctl-worker is-solrcloud)
 
-    # Restore file ownership for Solr
-    ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
-    ddev utility rebuild -s typo3-solr --cache 1>/dev/null
+    if [ "$IS_SOLR_CLOUD" = "true" ]; then
+        echo "🌥️  SolrCloud mode detected — uploading configsets to ZooKeeper"
 
-    # Create cores via Solr API
-    ddev solrctl-worker create-cores "$YAML_FILE"
+        if ! ddev solrctl-worker typo3lib-registered 2>/dev/null; then
+            echo "📦 Registering typo3lib sharedLib..."
+            ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
+            ddev solrctl-worker register-typo3lib "$YAML_FILE"
+            ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
+            echo "⬆️  Uploading solr.xml to ZooKeeper..."
+            ddev solr-zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
+            echo "🔄 Restarting Solr to load typo3lib..."
+            ddev utility rebuild -s typo3-solr --cache
+            echo "⏳ Waiting for SolrCloud to be ready..."
+            attempts=0
+            until ddev solrctl-worker is-solrcloud 2>/dev/null | grep -q "^true$"; do
+                attempts=$((attempts + 1))
+                if [ "$attempts" -ge 30 ]; then
+                    echo "❌ SolrCloud not ready after 90s"
+                    exit 1
+                fi
+                sleep 3
+            done
+            echo "✅ SolrCloud ready with typo3lib"
+        fi
+
+        ddev solrctl-worker upload-configsets "$YAML_FILE"
+        echo "🔨 Creating collections"
+        ddev solrctl-worker create-collections "$YAML_FILE"
+    else
+        echo "🖥️  Standalone mode — copying configsets to volume"
+        ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
+        ddev solrctl-worker copy-config "$YAML_FILE"
+        ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
+        ddev utility rebuild -s typo3-solr --cache 1>/dev/null
+        ddev solrctl-worker create-cores "$YAML_FILE"
+    fi
     ;;
 
 wipe)
-    # Make Solr volume writable, then unload cores and delete files via web container
-    ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
-    ddev solrctl-worker wipe
+    IS_SOLR_CLOUD=$(ddev solrctl-worker is-solrcloud)
 
-    ddev utility rebuild -s typo3-solr --cache 1>/dev/null
+    if [ "$IS_SOLR_CLOUD" = "true" ]; then
+        echo "🌥️  SolrCloud mode — deleting all collections and configsets"
+        ddev solrctl-worker wipe-cloud
+    else
+        ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
+        ddev solrctl-worker wipe
+        ddev utility rebuild -s typo3-solr --cache 1>/dev/null
+    fi
     ;;
 
 list)
@@ -54,14 +81,18 @@ list)
     echo "——————————————"
     echo -e "\033[1mExample Usage:\033[0m"
     echo "——————————————"
-    echo -e "\033[1mApply\033[0m"
+    echo -e "\033[1mApply\033[0m (auto-detects SolrCloud vs. standalone)"
     echo "—————"
-    echo "Create solr cores and configsets defined in .ddev/typo3-solr/config.yaml"
-    echo "👉 ddev solrctl apply [config path] - relative to docroot, optional"
+    echo "Create Solr cores/collections defined in $DEFAULT_YAML"
+    echo "👉 ddev solrctl apply [config path]"
     echo ""
     echo -e "\033[1mWipe\033[0m"
     echo "—————"
-    echo "Remove solr cores and configset"
+    echo "Remove all cores/collections and configsets"
     echo "👉 ddev solrctl wipe"
+    echo ""
+    echo -e "\033[1mList\033[0m"
+    echo "—————"
+    echo "👉 ddev solrctl list"
     ;;
 esac

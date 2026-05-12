@@ -41,11 +41,16 @@ setup() {
   assert_success
 }
 
-health_checks() {
+health_checks_standalone() {
   echo "Send request from 'web' to the api" >&3
   run ddev exec "curl -s --fail -H 'Content-Type: application/json' -X GET 'http://typo3-solr:8983/solr/admin/cores?action=STATUS&wt=json' | jq -r '.responseHeader.status'"
   assert_success
   assert_output "0"
+
+  echo "is-solrcloud returns false" >&3
+  run ddev solrctl-worker is-solrcloud
+  assert_success
+  assert_output "false"
 
   echo "Apply configuration defined in tests/testdata/config.yaml" >&3
   run ddev solrctl apply tests/testdata/config.yaml
@@ -103,29 +108,126 @@ health_checks() {
   assert_output --partial "Solr Admin"
 }
 
+health_checks_solrcloud() {
+  echo "SolrCloud API up" >&3
+  run ddev exec "curl -s --fail 'http://typo3-solr:8983/solr/admin/collections?action=LIST&wt=json' | jq -r '.responseHeader.status'"
+  assert_success
+  assert_output "0"
+
+  echo "is-solrcloud returns true" >&3
+  run ddev solrctl-worker is-solrcloud
+  assert_success
+  assert_output "true"
+
+  echo "Apply config in SolrCloud mode" >&3
+  run ddev solrctl apply tests/testdata/config.yaml
+  assert_success
+  assert_output --partial "Apply config tests/testdata/config.yaml"
+  assert_output --partial "SolrCloud mode detected"
+  assert_output --partial "SolrCloud ready with typo3lib"
+  assert_output --partial "Configset 'example_configset_english' uploaded"
+  assert_output --partial "Configset 'example_configset_german' uploaded"
+  assert_output --partial "Collection 'core_en' created"
+  assert_output --partial "Collection 'core_de' created"
+
+  echo "Managed stopwords seeded for collections" >&3
+  assert_output --partial "Seeded"
+  assert_output --partial "stopwords"
+
+  echo "Configsets present in ZooKeeper" >&3
+  run ddev exec "curl -s 'http://typo3-solr:8983/solr/admin/configs?action=LIST&wt=json' | jq -r '.configSets[]'"
+  assert_success
+  assert_output --partial "example_configset_english"
+  assert_output --partial "example_configset_german"
+
+  echo "List shows 2 collections in SolrCloud mode" >&3
+  run ddev solrctl list
+  assert_success
+  assert_output --partial "Found 2 collections (SolrCloud mode)"
+  assert_output --partial "* core_en"
+  assert_output --partial "* core_de"
+
+  echo "Apply again is idempotent" >&3
+  run ddev solrctl apply tests/testdata/config.yaml
+  assert_success
+  assert_output --partial "Configset 'example_configset_english' already exists"
+  assert_output --partial "Configset 'example_configset_german' already exists"
+  assert_output --partial "Collection 'core_en' already exists"
+  assert_output --partial "Collection 'core_de' already exists"
+
+  echo "Wipe removes all collections and configsets" >&3
+  run ddev solrctl wipe
+  assert_success
+  assert_output --partial "SolrCloud mode"
+  assert_output --partial "Deleted collection 'core_de'"
+  assert_output --partial "Deleted collection 'core_en'"
+  assert_output --partial "Deleted configset 'example_configset_english'"
+  assert_output --partial "Deleted configset 'example_configset_german'"
+
+  echo "No collections after wipe" >&3
+  run ddev exec "curl -s 'http://typo3-solr:8983/solr/admin/collections?action=LIST&wt=json' | jq -r '.collections | length'"
+  assert_success
+  assert_output "0"
+
+  echo "No user configsets after wipe" >&3
+  run ddev exec "curl -s 'http://typo3-solr:8983/solr/admin/configs?action=LIST&wt=json' | jq -r '[.configSets[] | select(startswith(\"_\") | not)] | length'"
+  assert_success
+  assert_output "0"
+
+  echo "Solr Admin UI accessible in SolrCloud mode" >&3
+  run curl -sfL https://${PROJNAME}.ddev.site:8984
+  assert_success
+  assert_output --partial "Solr Admin"
+}
+
 teardown() {
   set -eu -o pipefail
   ddev delete -Oy ${PROJNAME} >/dev/null 2>&1
   [ "${TESTDIR}" != "" ] && rm -rf ${TESTDIR}
 }
 
-@test "install from directory" {
+@test "install from directory (Standalone)" {
   set -eu -o pipefail
   echo "# ddev add-on get ${DIR} with project ${PROJNAME} in $(pwd)" >&3
   run ddev add-on get "${DIR}"
   assert_success
   run ddev restart -y
   assert_success
-  health_checks
+  health_checks_standalone
 }
 
 # bats test_tags=release
-@test "install from release" {
+@test "install from release (Standalone)" {
   set -eu -o pipefail
   echo "# ddev add-on get ${GITHUB_REPO} with project ${PROJNAME} in $(pwd)" >&3
   run ddev add-on get "${GITHUB_REPO}"
   assert_success
   run ddev restart -y
   assert_success
-  health_checks
+  health_checks_standalone
+}
+
+@test "install from directory (SolrCloud)" {
+  set -eu -o pipefail
+  echo "# ddev add-on get ${DIR} with SolrCloud mode, project ${PROJNAME} in $(pwd)" >&3
+  run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
+  assert_success
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev restart -y
+  assert_success
+  health_checks_solrcloud
+}
+
+# bats test_tags=release
+@test "install from release (SolrCloud)" {
+  set -eu -o pipefail
+  echo "# ddev add-on get ${GITHUB_REPO} with SolrCloud mode, project ${PROJNAME} in $(pwd)" >&3
+  run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
+  assert_success
+  run ddev add-on get "${GITHUB_REPO}"
+  assert_success
+  run ddev restart -y
+  assert_success
+  health_checks_solrcloud
 }
