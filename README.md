@@ -142,7 +142,7 @@ All customization options (use with caution):
 
 | Variable | Flag | Default |
 | -------- | ---- | ------- |
-| `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.8` |
+| `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.10` |
 | `SOLR_MODE` | `--solr-mode` | `standalone` (can be `standalone` or `solrcloud`) |
 
 ## Credits
