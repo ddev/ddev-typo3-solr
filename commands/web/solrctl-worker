@@ -121,6 +121,8 @@ seed_managed_resources_for_collection() {
 # Upload language-specific configsets to ZooKeeper (SolrCloud mode).
 # Each unique schema language dir gets its own configset: ext_solr_13_1_0_<lang>.
 cmd_upload_configsets() {
+    command -v zip >/dev/null 2>&1 || { echo "❌ 'zip' not found. Add it to .ddev/config.yaml: webimage_extra_packages: [zip]"; exit 1; }
+
     local yaml_file
     yaml_file=$(resolve_path "$1")
 
@@ -226,53 +228,6 @@ cmd_create_collections() {
             fi
 
             seed_managed_resources_for_collection "${name}" "${base_path}/conf" "${lang_code}"
-        done
-    done
-}
-
-# Delete collections and configsets listed in config.yaml (targeted SolrCloud deletion).
-cmd_delete_collections() {
-    local yaml_file
-    yaml_file=$(resolve_path "$1")
-
-    local configset_count
-    configset_count=$(yq eval '.configsets | length' "$yaml_file")
-    declare -A processed_langs
-
-    local existing_collections existing_configs
-    existing_collections=$(curl -s "${SOLR_API}/admin/collections?action=LIST")
-    existing_configs=$(curl -s "${SOLR_API}/admin/configs?action=LIST")
-
-    for ((i = 0; i < configset_count; i++)); do
-        local configset_base_name core_count
-        configset_base_name=$(yq eval ".configsets[$i].name" "$yaml_file")
-        core_count=$(yq eval ".configsets[$i].cores | length" "$yaml_file")
-
-        for ((j = 0; j < core_count; j++)); do
-            local name schema lang_dir configset_name
-            name=$(yq eval ".configsets[$i].cores[$j].name" "$yaml_file")
-            schema=$(yq eval ".configsets[$i].cores[$j].schema" "$yaml_file")
-            lang_dir=$(dirname "$schema")
-            configset_name="${configset_base_name}_${lang_dir}"
-
-            if echo "$existing_collections" | grep -q "\"${name}\""; then
-                local response
-                response=$(curl -s "${SOLR_API}/admin/collections?action=DELETE&name=${name}")
-                [ "$(solr_status "$response")" = "0" ] \
-                    && echo "🗑️  Deleted collection '${name}'" \
-                    || echo "❌ $(solr_error "$response")"
-            fi
-
-            if [ -z "${processed_langs[$lang_dir]+_}" ]; then
-                processed_langs[$lang_dir]=1
-                if echo "$existing_configs" | grep -q "\"${configset_name}\""; then
-                    local response
-                    response=$(curl -s "${SOLR_API}/admin/configs?action=DELETE&name=${configset_name}")
-                    [ "$(solr_status "$response")" = "0" ] \
-                        && echo "🗑️  Deleted configset '${configset_name}'" \
-                        || echo "❌ $(solr_error "$response")"
-                fi
-            fi
         done
     done
 }

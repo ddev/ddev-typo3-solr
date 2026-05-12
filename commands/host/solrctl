@@ -33,10 +33,15 @@ apply)
             echo "⬆️  Uploading solr.xml to ZooKeeper..."
             ddev solr-zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
             echo "🔄 Restarting Solr to load typo3lib..."
-            SITE_NAME=$(ddev describe -j | ddev exec "yq -p=json eval '.raw.name'")
-            docker restart "ddev-${SITE_NAME}-typo3-solr"
+            ddev utility rebuild -s typo3-solr --cache
             echo "⏳ Waiting for SolrCloud to be ready..."
+            attempts=0
             until ddev solrctl-worker is-solrcloud 2>/dev/null | grep -q "^true$"; do
+                attempts=$((attempts + 1))
+                if [ "$attempts" -ge 30 ]; then
+                    echo "❌ SolrCloud not ready after 90s"
+                    exit 1
+                fi
                 sleep 3
             done
             echo "✅ SolrCloud ready with typo3lib"
