@@ -124,7 +124,9 @@ health_checks_solrcloud() {
   assert_success
   assert_output --partial "Apply config tests/testdata/config.yaml"
   assert_output --partial "SolrCloud mode detected"
-  assert_output --partial "SolrCloud ready with typo3lib"
+  assert_output --partial "Copying solr.xml to Solr data dir"
+  assert_output --partial "Copying typo3lib to Solr data dir"
+  assert_output --partial "Uploading solr.xml to ZooKeeper"
   assert_output --partial "Configset 'example_configset_english' uploaded"
   assert_output --partial "Configset 'example_configset_german' uploaded"
   assert_output --partial "Collection 'core_en' created"
