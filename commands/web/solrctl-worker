@@ -30,7 +30,7 @@ cmd_is_solrcloud() {
 
 cmd_typo3lib_registered() {
     if [ -d "${SOLR_DATA}/typo3lib" ]; then
-        echo "✅ typo3lib registered"
+        echo "ℹ️ typo3lib already registered"
     else
         echo "❌ typo3lib not registered"
         return 1
@@ -86,7 +86,7 @@ seed_managed_resources_for_collection() {
                     -H "Content-Type: application/json" -d "$words_json")
                 [ "$(solr_status "$response")" = "0" ] \
                     && echo "  📚 Seeded ${word_count} stopwords (${lang_code})" \
-                    || echo "  ⚠️  Stopword seed failed: $(solr_error "$response")"
+                    || echo "  ❌  Stopword seed failed: $(solr_error "$response")"
             fi
         else
             echo "  ℹ️  Stopwords already populated (${current_count} words)"
@@ -110,7 +110,7 @@ seed_managed_resources_for_collection() {
                     -H "Content-Type: application/json" -d "$map_json")
                 [ "$(solr_status "$response")" = "0" ] \
                     && echo "  📚 Seeded ${entry_count} synonym entries (${lang_code})" \
-                    || echo "  ⚠️  Synonym seed failed: $(solr_error "$response")"
+                    || echo "  ❌  Synonym seed failed: $(solr_error "$response")"
             fi
         else
             echo "  ℹ️  Synonyms already populated (${current_count} entries)"
@@ -266,7 +266,7 @@ cmd_wipe_cloud() {
     fi
 }
 
-# Copy solr.xml and typo3lib to SOLR_DATA (shared volume) for SolrCloud sharedLib loading.
+# Copy solr.xml and typo3lib to SOLR_DATA (shared volume)
 cmd_register_typo3lib() {
     local yaml_file
     yaml_file=$(resolve_path "$1")
@@ -290,8 +290,6 @@ cmd_copy_config() {
     yaml_file=$(resolve_path "$1")
 
     [ ! -f "$yaml_file" ] && { echo "Add-on config file $yaml_file does not exist."; exit 1; }
-
-    cmd_register_typo3lib "$yaml_file"
 
     local configset_count
     configset_count=$(yq eval '.configsets | length' "$yaml_file")

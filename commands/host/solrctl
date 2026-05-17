@@ -23,36 +23,23 @@ apply)
     IS_SOLR_CLOUD=$(ddev solrctl-worker is-solrcloud)
 
     if [ "$IS_SOLR_CLOUD" = "true" ]; then
-        echo "🌥️  SolrCloud mode detected — uploading configsets to ZooKeeper"
-
-        if ! ddev solrctl-worker typo3lib-registered 2>/dev/null; then
-            echo "📦 Registering typo3lib sharedLib..."
+        echo "🌥️  SolrCloud mode detected — uploading configsets with ZooKeeper"
+        if ! ddev solrctl-worker typo3lib-registered >/dev/null 2>&1; then
             ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
             ddev solrctl-worker register-typo3lib "$YAML_FILE"
             ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
-            echo "⬆️  Uploading solr.xml to ZooKeeper..."
-            ddev solr-zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
-            echo "🔄 Restarting Solr to load typo3lib..."
-            ddev utility rebuild -s typo3-solr --cache
-            echo "⏳ Waiting for SolrCloud to be ready..."
-            attempts=0
-            until ddev solrctl-worker is-solrcloud 2>/dev/null | grep -q "^true$"; do
-                attempts=$((attempts + 1))
-                if [ "$attempts" -ge 30 ]; then
-                    echo "❌ SolrCloud not ready after 90s"
-                    exit 1
-                fi
-                sleep 3
-            done
-            echo "✅ SolrCloud ready with typo3lib"
+            ddev utility rebuild -s typo3-solr --cache 1>/dev/null
         fi
-
+        echo "⬆️  Uploading solr.xml to ZooKeeper..."
+        ddev solr-zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
         ddev solrctl-worker upload-configsets "$YAML_FILE"
-        echo "🔨 Creating collections"
         ddev solrctl-worker create-collections "$YAML_FILE"
     else
         echo "🖥️  Standalone mode — copying configsets to volume"
         ddev exec -s typo3-solr -u root chmod -R 777 /var/solr/
+        if ! ddev solrctl-worker typo3lib-registered >/dev/null 2>&1; then
+            ddev solrctl-worker register-typo3lib "$YAML_FILE"
+        fi
         ddev solrctl-worker copy-config "$YAML_FILE"
         ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
         ddev utility rebuild -s typo3-solr --cache 1>/dev/null
