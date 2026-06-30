@@ -1,0 +1,10 @@
+config: "tests/testdata/solr10/solr.xml"
+typo3lib: "tests/testdata/solr10/typo3lib"
+configsets:
+  - name: "example_configset"
+    path: "tests/testdata/solr10/configset/"
+    cores:
+      - name: "core_en"
+        schema: "english/schema.xml"
+      - name: "core_de"
+        schema: "german/schema.xml"

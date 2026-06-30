@@ -41,7 +41,38 @@ setup() {
   assert_success
 }
 
+# Install the add-on, optionally pinning the Solr mode and base image, then restart.
+# Usage: install_addon <source> [standalone|solrcloud] [solr-image]
+install_addon() {
+  local source="$1" mode="${2:-standalone}" image="${3:-}"
+
+  if [ "${mode}" = "solrcloud" ]; then
+    run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
+    assert_success
+  fi
+  if [ -n "${image}" ]; then
+    run ddev dotenv set .ddev/.env.typo3-solr --solr-base-image="${image}"
+    assert_success
+  fi
+
+  run ddev add-on get "${source}"
+  assert_success
+  run ddev restart -y
+  assert_success
+}
+
+# Assert the running Solr server reports the expected version prefix (e.g. "9.8", "10.").
+assert_solr_version() {
+  local expected="$1"
+  echo "Solr server reports version ${expected}*" >&3
+  run ddev exec "curl -s --fail 'http://typo3-solr:8983/solr/admin/info/system?wt=json' | jq -r '.lucene[\"solr-spec-version\"]'"
+  assert_success
+  assert_output --partial "${expected}"
+}
+
 health_checks_standalone() {
+  local config="${1:-tests/testdata/solr9/config.yaml}"
+
   echo "Send request from 'web' to the api" >&3
   run ddev exec "curl -s --fail -H 'Content-Type: application/json' -X GET 'http://typo3-solr:8983/solr/admin/cores?action=STATUS&wt=json' | jq -r '.responseHeader.status'"
   assert_success
@@ -52,10 +83,10 @@ health_checks_standalone() {
   assert_success
   assert_output "false"
 
-  echo "Apply configuration defined in tests/testdata/config.yaml" >&3
-  run ddev solrctl apply tests/testdata/config.yaml
+  echo "Apply configuration defined in ${config}" >&3
+  run ddev solrctl apply "${config}"
   assert_success
-  assert_output --partial "Apply config tests/testdata/config.yaml"
+  assert_output --partial "Apply config ${config}"
 
   echo "See expected cores" >&3
   run ddev solrctl list
@@ -65,7 +96,7 @@ health_checks_standalone() {
   assert_output --partial "* core_en"
 
   echo "Apply configuration with existing cores, do not fail on existing" >&3
-  run ddev solrctl apply tests/testdata/config.yaml
+  run ddev solrctl apply "${config}"
   assert_success
   assert_output --partial "Core with name 'core_de' already exists"
   assert_output --partial "Core with name 'core_en' already exists"
@@ -91,24 +122,26 @@ health_checks_standalone() {
   assert_output --partial "No Solr nodes are running"
 
   echo "Solr Admin UI via HTTP from outside is redirected to HTTP /solr/" >&3
-  run curl -sfI http://${PROJNAME}.ddev.site:8983
+  run curl -sfI --resolve ${PROJNAME}.ddev.site:8983:127.0.0.1 http://${PROJNAME}.ddev.site:8983
   assert_success
   assert_output --partial "HTTP/1.1 302"
   assert_output --partial "Location: /solr/"
 
   echo "Solr Admin UI via HTTPS from outside is redirected to HTTPS /solr/" >&3
-  run curl -sfI https://${PROJNAME}.ddev.site:8984
+  run curl -sfI --resolve ${PROJNAME}.ddev.site:8984:127.0.0.1 https://${PROJNAME}.ddev.site:8984
   assert_success
   assert_output --partial "HTTP/2 302"
   assert_output --partial "location: /solr/"
 
   echo "Solr Admin UI is working from outside" >&3
-  run curl -sfL https://${PROJNAME}.ddev.site:8984
+  run curl -sfL --resolve ${PROJNAME}.ddev.site:8984:127.0.0.1 https://${PROJNAME}.ddev.site:8984
   assert_success
   assert_output --partial "Solr Admin"
 }
 
 health_checks_solrcloud() {
+  local config="${1:-tests/testdata/solr9/config.yaml}"
+
   echo "SolrCloud API up" >&3
   run ddev exec "curl -s --fail 'http://typo3-solr:8983/solr/admin/collections?action=LIST&wt=json' | jq -r '.responseHeader.status'"
   assert_success
@@ -120,9 +153,9 @@ health_checks_solrcloud() {
   assert_output "true"
 
   echo "Apply config in SolrCloud mode" >&3
-  run ddev solrctl apply tests/testdata/config.yaml
+  run ddev solrctl apply "${config}"
   assert_success
-  assert_output --partial "Apply config tests/testdata/config.yaml"
+  assert_output --partial "Apply config ${config}"
   assert_output --partial "SolrCloud mode detected"
   assert_output --partial "Copying solr.xml to Solr data dir"
   assert_output --partial "Copying typo3lib to Solr data dir"
@@ -150,7 +183,7 @@ health_checks_solrcloud() {
   assert_output --partial "* core_de"
 
   echo "Apply again is idempotent" >&3
-  run ddev solrctl apply tests/testdata/config.yaml
+  run ddev solrctl apply "${config}"
   assert_success
   assert_output --partial "Configset 'example_configset_english' already exists"
   assert_output --partial "Configset 'example_configset_german' already exists"
@@ -177,7 +210,7 @@ health_checks_solrcloud() {
   assert_output "0"
 
   echo "Solr Admin UI accessible in SolrCloud mode" >&3
-  run curl -sfL https://${PROJNAME}.ddev.site:8984
+  run curl -sfL --resolve ${PROJNAME}.ddev.site:8984:127.0.0.1 https://${PROJNAME}.ddev.site:8984
   assert_success
   assert_output --partial "Solr Admin"
 }
@@ -188,48 +221,54 @@ teardown() {
   [ "${TESTDIR}" != "" ] && rm -rf ${TESTDIR}
 }
 
-@test "install from directory (Standalone)" {
+@test "install from directory (Standalone, Solr 9.8)" {
   set -eu -o pipefail
-  echo "# ddev add-on get ${DIR} with project ${PROJNAME} in $(pwd)" >&3
-  run ddev add-on get "${DIR}"
-  assert_success
-  run ddev restart -y
-  assert_success
+  echo "# ddev add-on get ${DIR} (Standalone, solr:9.8) with project ${PROJNAME} in $(pwd)" >&3
+  install_addon "${DIR}" standalone "solr:9.8"
+  assert_solr_version "9.8"
   health_checks_standalone
+}
+
+@test "install from directory (Standalone, Solr 10)" {
+  set -eu -o pipefail
+  echo "# ddev add-on get ${DIR} (Standalone, solr:10) with project ${PROJNAME} in $(pwd)" >&3
+  install_addon "${DIR}" standalone "solr:10"
+  assert_solr_version "10."
+  # Solr 10 cannot load the EXT:solr 9.x fixture (removed classes/params); use the
+  # dedicated Solr-10-compatible configset under tests/testdata/solr10.
+  health_checks_standalone "tests/testdata/solr10/config.yaml"
+}
+
+@test "install from directory (SolrCloud, Solr 9.8)" {
+  set -eu -o pipefail
+  echo "# ddev add-on get ${DIR} (SolrCloud, solr:9.8) with project ${PROJNAME} in $(pwd)" >&3
+  install_addon "${DIR}" solrcloud "solr:9.8"
+  assert_solr_version "9.8"
+  health_checks_solrcloud
+}
+
+@test "install from directory (SolrCloud, Solr 10)" {
+  set -eu -o pipefail
+  echo "# ddev add-on get ${DIR} (SolrCloud, solr:10) with project ${PROJNAME} in $(pwd)" >&3
+  install_addon "${DIR}" solrcloud "solr:10"
+  assert_solr_version "10."
+  # Solr 10 cannot load the EXT:solr 9.x fixture (removed classes/params); use the
+  # dedicated Solr-10-compatible configset under tests/testdata/solr10.
+  health_checks_solrcloud "tests/testdata/solr10/config.yaml"
 }
 
 # bats test_tags=release
 @test "install from release (Standalone)" {
   set -eu -o pipefail
-  echo "# ddev add-on get ${GITHUB_REPO} with project ${PROJNAME} in $(pwd)" >&3
-  run ddev add-on get "${GITHUB_REPO}"
-  assert_success
-  run ddev restart -y
-  assert_success
+  echo "# ddev add-on get ${GITHUB_REPO} (Standalone, default image) with project ${PROJNAME} in $(pwd)" >&3
+  install_addon "${GITHUB_REPO}" standalone ""
   health_checks_standalone
-}
-
-@test "install from directory (SolrCloud)" {
-  set -eu -o pipefail
-  echo "# ddev add-on get ${DIR} with SolrCloud mode, project ${PROJNAME} in $(pwd)" >&3
-  run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
-  assert_success
-  run ddev add-on get "${DIR}"
-  assert_success
-  run ddev restart -y
-  assert_success
-  health_checks_solrcloud
 }
 
 # bats test_tags=release
 @test "install from release (SolrCloud)" {
   set -eu -o pipefail
-  echo "# ddev add-on get ${GITHUB_REPO} with SolrCloud mode, project ${PROJNAME} in $(pwd)" >&3
-  run ddev dotenv set .ddev/.env.typo3-solr --solr-mode="solrcloud"
-  assert_success
-  run ddev add-on get "${GITHUB_REPO}"
-  assert_success
-  run ddev restart -y
-  assert_success
+  echo "# ddev add-on get ${GITHUB_REPO} (SolrCloud, default image) with project ${PROJNAME} in $(pwd)" >&3
+  install_addon "${GITHUB_REPO}" solrcloud ""
   health_checks_solrcloud
 }

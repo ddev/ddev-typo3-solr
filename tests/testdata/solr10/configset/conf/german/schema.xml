@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal, Solr-10-compatible schema for the add-on's Solr 10 tests (german core).
+  See english/schema.xml for the rationale; this differs only in the schema name.
+-->
+<schema name="minimal_de" version="1.6">
+	<uniqueKey>id</uniqueKey>
+
+	<fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
+	<fieldType name="plong" class="solr.LongPointField" docValues="true"/>
+
+	<fieldType name="text" class="solr.TextField" positionIncrementGap="100">
+		<analyzer type="index">
+			<tokenizer class="solr.StandardTokenizerFactory"/>
+			<filter class="solr.LowerCaseFilterFactory"/>
+		</analyzer>
+		<analyzer type="query">
+			<tokenizer class="solr.StandardTokenizerFactory"/>
+			<filter class="solr.ManagedStopFilterFactory" managed="${solr.core.name}"/>
+			<filter class="solr.ManagedSynonymGraphFilterFactory" managed="${solr.core.name}"/>
+			<filter class="solr.LowerCaseFilterFactory"/>
+		</analyzer>
+	</fieldType>
+
+	<field name="id" type="string" indexed="true" stored="true" required="true" multiValued="false"/>
+	<field name="_version_" type="plong" indexed="false" stored="false" docValues="true"/>
+	<field name="content" type="text" indexed="true" stored="true" multiValued="true"/>
+</schema>

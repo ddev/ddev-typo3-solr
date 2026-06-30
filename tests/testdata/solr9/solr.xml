@@ -1,0 +1,21 @@
+<!--
+  Minimal, self-contained solr.xml for the add-on Solr 9.8 tests.
+
+  Unlike Solr 10 (tests/testdata/solr10/solr.xml), Solr 9.x REQUIRES the <solrcloud>
+  entry `hostContext` — it validates the section even in standalone mode and aborts with
+  "solrcloud section missing required entry 'hostContext'" if absent — so this fixture
+  keeps the classic 9.x <solrcloud> entries. It omits the `analytics` module and
+  `sharedLib` because the minimal configset needs neither.
+-->
+<solr>
+	<solrcloud>
+		<str name="host">${host:}</str>
+		<int name="hostPort">${jetty.port:8983}</int>
+		<str name="hostContext">${hostContext:solr}</str>
+		<int name="zkClientTimeout">${zkClientTimeout:30000}</int>
+		<bool name="genericCoreNodeNames">${genericCoreNodeNames:true}</bool>
+	</solrcloud>
+
+	<str name="allowPaths">${solr.allowPaths:}</str>
+	<str name="allowUrls">${solr.allowUrls:}</str>
+</solr>

@@ -24,14 +24,14 @@ After installation, make sure to commit the `.ddev` directory to version control
 
 ## Usage
 
-| Command | Description |
-| ------- | ----------- |
-| `ddev solrctl --help` | Create and destroy solr cores/collections and configsets |
-| `ddev solr-admin` | Open Solr Admin in your browser |
-| `ddev solr` | Run Solr CLI inside the Solr container |
-| `ddev solr-zk` | Run ZooKeeper CLI commands inside the Solr container (SolrCloud only) |
-| `ddev describe` | View service status and used ports for Solr |
-| `ddev logs -s typo3-solr` | Check Solr logs |
+| Command                   | Description                                                           |
+|---------------------------|-----------------------------------------------------------------------|
+| `ddev solrctl --help`     | Create and destroy solr cores/collections and configsets              |
+| `ddev solr-admin`         | Open Solr Admin in your browser                                       |
+| `ddev solr`               | Run Solr CLI inside the Solr container                                |
+| `ddev solr-zk`            | Run ZooKeeper CLI commands inside the Solr container (SolrCloud only) |
+| `ddev describe`           | View service status and used ports for Solr                           |
+| `ddev logs -s typo3-solr` | Check Solr logs                                                       |
 
 ## Configuration
 
@@ -117,9 +117,17 @@ Make sure to commit the `.ddev/.env.typo3-solr` file to version control.
 
 This addon defaults to installing a preferred version of the [docker Solr image](https://hub.docker.com/_/solr), but can be configured to use a different version via environment variable (`SOLR_BASE_IMAGE`).
 
+Both **Solr 9.8+** and **Solr 10** are supported, in standalone and SolrCloud mode.
+
+> [!IMPORTANT]
+> Solr 10 removed `<lib/>` directives, several field types and the
+> `stream.body` request parameter. Only use `solr:10` with an EXT:solr version
+> (and configset) built for Solr 10 — older EXT:solr configsets are designed for
+> Solr 9.x and may fail to load. If unsure, stay on the default `solr:9.x` image.
+
 ```bash
 # Change image version as appropriate.
-ddev dotenv set .ddev/.env.typo3-solr --solr-base-image="solr:9.8"
+ddev dotenv set .ddev/.env.typo3-solr --solr-base-image="solr:10"
 
 ddev add-on get ddev/ddev-typo3-solr
 
@@ -140,10 +148,10 @@ Make sure to commit the `.ddev/.env.typo3-solr` file to version control.
 
 All customization options (use with caution):
 
-| Variable | Flag | Default |
-| -------- | ---- | ------- |
-| `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.10` |
-| `SOLR_MODE` | `--solr-mode` | `standalone` (can be `standalone` or `solrcloud`) |
+| Variable          | Flag                | Default                                           |
+|-------------------|---------------------|---------------------------------------------------|
+| `SOLR_BASE_IMAGE` | `--solr-base-image` | `solr:9.10` (any `solr:9.8`+ or `solr:10` image)  |
+| `SOLR_MODE`       | `--solr-mode`       | `standalone` (can be `standalone` or `solrcloud`) |
 
 ## Credits
 
