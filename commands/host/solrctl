@@ -8,6 +8,30 @@
 CMD="${1:-}"
 DEFAULT_YAML=".ddev/typo3-solr/config.yaml"
 
+# Wait until Solr has finished (re)starting and its CoreContainer is ready. After
+# `ddev utility rebuild` the HTTP port answers before Solr is usable — it serves a 404
+# "type the correct path" page, and in SolrCloud mode the embedded ZooKeeper (used by
+# `solr-zk cp`) is not yet listening — so poll the admin API until it really responds.
+# Usage: wait_for_solr [standalone|solrcloud]
+wait_for_solr() {
+    local mode="${1:-standalone}" endpoint marker
+    if [ "$mode" = "solrcloud" ]; then
+        endpoint="admin/collections?action=LIST"   # needs CoreContainer + ZooKeeper
+        marker='"collections"'
+    else
+        endpoint="admin/info/system?wt=json"        # needs CoreContainer
+        marker="solr-spec-version"
+    fi
+    for _ in $(seq 1 60); do
+        if ddev exec "curl -sf 'http://typo3-solr:8983/solr/${endpoint}'" 2>/dev/null | grep -q "${marker}"; then
+            return 0
+        fi
+        sleep 2
+    done
+    echo "⚠️  Timed out waiting for Solr to become ready"
+    return 1
+}
+
 if [ "$(ddev describe -j | ddev exec "yq -p=json eval '.raw.status'")" = "stopped" ]; then
     ddev start
 fi
@@ -30,6 +54,7 @@ apply)
             ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
             ddev utility rebuild -s typo3-solr --cache 1>/dev/null
         fi
+        wait_for_solr solrcloud
         echo "⬆️  Uploading solr.xml to ZooKeeper..."
         ddev solr-zk cp file:///var/solr/data/solr.xml zk:/solr.xml -z localhost:9983
         ddev solrctl-worker upload-configsets "$YAML_FILE"
@@ -43,6 +68,7 @@ apply)
         ddev solrctl-worker copy-config "$YAML_FILE"
         ddev exec -s typo3-solr -u root chown -R solr:solr /var/solr/
         ddev utility rebuild -s typo3-solr --cache 1>/dev/null
+        wait_for_solr standalone
         ddev solrctl-worker create-cores "$YAML_FILE"
     fi
     ;;

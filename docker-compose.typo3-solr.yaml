@@ -7,6 +7,15 @@ services:
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
       com.ddev.approot: $DDEV_APPROOT
+    # Solr 10 made `bin/solr start` default to SolrCloud and ignore the SOLR_MODE
+    # env var, so standalone must be forced explicitly with `--user-managed`. That
+    # flag is also accepted by Solr 9.8+, so it is version-agnostic. For SolrCloud
+    # we pass no flag: Solr 9.x honours SOLR_MODE=solrcloud, Solr 10 defaults to it.
+    # `$$SOLR_MODE` is escaped so the container shell evaluates it at runtime.
+    command:
+      - sh
+      - -c
+      - 'if [ "$${SOLR_MODE:-standalone}" = "solrcloud" ]; then exec solr-foreground; else exec solr-foreground --user-managed; fi'
     environment:
       - VIRTUAL_HOST=$DDEV_HOSTNAME
       - HTTP_EXPOSE=8983:8983

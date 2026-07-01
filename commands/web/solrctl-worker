@@ -17,8 +17,23 @@ resolve_path() {
     [[ "$path" = /* ]] && echo "$path" || echo "/var/www/html/$path"
 }
 
-solr_status() { echo "$1" | yq '.responseHeader.status // -1'; }
-solr_error()  { echo "$1" | yq '.error.msg // "unknown"'; }
+# Extract responseHeader.status from a Solr JSON response; -1 if absent/unparseable.
+solr_status() { echo "$1" | yq -p=json '.responseHeader.status // -1' 2>/dev/null || echo "-1"; }
+
+# Surface a useful error from a Solr response. Prefer .error.msg, but fall back to the
+# raw body (one line, truncated) so genuine failures (HTML error pages, empty replies,
+# or a different error shape) are visible instead of a meaningless "unknown".
+solr_error() {
+    local body="$1" msg
+    msg=$(echo "$body" | yq -p=json '.error.msg // ""' 2>/dev/null || true)
+    if [ -n "$msg" ] && [ "$msg" != "null" ]; then
+        echo "$msg"
+    elif [ -z "${body//[[:space:]]/}" ]; then
+        echo "empty response (Solr unreachable, or core/collection load failed before a JSON reply)"
+    else
+        echo "$body" | tr '\n\t' '  ' | sed 's/  */ /g' | cut -c1-1000
+    fi
+}
 
 cmd_is_solrcloud() {
     if curl -s "${SOLR_API}/admin/collections?action=LIST" 2>/dev/null | grep -q '"collections"'; then

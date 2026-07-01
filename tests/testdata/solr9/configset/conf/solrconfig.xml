@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal, self-contained solrconfig.xml for the add-on Solr 9.8 tests.
+  Mirrors tests/testdata/solr10/configset/conf/solrconfig.xml; only the
+  luceneMatchVersion differs (Solr 9.x rejects a 10.x value). No EXT:solr plugin
+  or removed classes, so cores load without external dependencies.
+-->
+<config>
+	<luceneMatchVersion>9.3.0</luceneMatchVersion>
+
+	<dataDir>${solr.data.dir:}</dataDir>
+	<directoryFactory name="DirectoryFactory" class="solr.NRTCachingDirectoryFactory"/>
+	<codecFactory class="solr.SchemaCodecFactory"/>
+	<schemaFactory class="ClassicIndexSchemaFactory"/>
+
+	<updateHandler class="solr.DirectUpdateHandler2">
+		<updateLog>
+			<str name="dir">${solr.ulog.dir:}</str>
+		</updateLog>
+		<autoCommit>
+			<maxTime>${solr.autoCommit.maxTime:15000}</maxTime>
+			<openSearcher>false</openSearcher>
+		</autoCommit>
+	</updateHandler>
+
+	<query>
+		<filterCache class="solr.CaffeineCache" size="512" initialSize="512" autowarmCount="0"/>
+		<queryResultCache class="solr.CaffeineCache" size="512" initialSize="512" autowarmCount="0"/>
+		<documentCache class="solr.CaffeineCache" size="512" initialSize="512" autowarmCount="0"/>
+	</query>
+
+	<requestHandler name="/select" class="solr.SearchHandler">
+		<lst name="defaults">
+			<str name="echoParams">explicit</str>
+			<str name="df">content</str>
+		</lst>
+	</requestHandler>
+
+	<requestHandler name="/update" class="solr.UpdateRequestHandler"/>
+
+	<requestHandler name="/get" class="solr.RealTimeGetHandler">
+		<lst name="defaults">
+			<str name="omitHeader">true</str>
+		</lst>
+	</requestHandler>
+</config>

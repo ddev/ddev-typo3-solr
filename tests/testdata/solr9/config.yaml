@@ -1,0 +1,12 @@
+#ddev-generated
+
+config: "tests/testdata/solr9/solr.xml"
+typo3lib: "tests/testdata/solr9/typo3lib"
+configsets:
+  - name: "example_configset"
+    path: "tests/testdata/solr9/configset/"
+    cores:
+      - name: "core_en"
+        schema: "english/schema.xml"
+      - name: "core_de"
+        schema: "german/schema.xml"

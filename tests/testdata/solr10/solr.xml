@@ -1,0 +1,21 @@
+<!--
+  Minimal, Solr-10-compatible solr.xml for the add-on's Solr 10 tests.
+
+  The real EXT:solr 9.x fixture (tests/testdata/solr.xml) cannot load on Solr 10:
+  Solr 10 removed the <solrcloud> parameters `hostContext` and `genericCoreNodeNames`
+  and the `analytics` module, and rejects them as fatal errors at node startup. This
+  fixture carries none of that so it boots cleanly on Solr 10.
+
+  The <solrcloud> section is required even though it only sets defaults: Solr 10 aborts
+  with "Cannot start Solr in cloud mode - no cloud config provided" if it is missing.
+-->
+<solr>
+	<solrcloud>
+		<str name="host">${host:}</str>
+		<int name="hostPort">${jetty.port:8983}</int>
+		<int name="zkClientTimeout">${zkClientTimeout:30000}</int>
+	</solrcloud>
+
+	<str name="allowPaths">${solr.allowPaths:}</str>
+	<str name="allowUrls">${solr.allowUrls:}</str>
+</solr>
